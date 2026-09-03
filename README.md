@@ -12,8 +12,15 @@ Primera versión de una aplicación móvil desarrollada con Expo y React Native.
 
 ## Ejecución
 
+Después de clonar o descargar el repositorio, ejecutar el siguiente comando desde una terminal ubicada en la carpeta del proyecto. Este paso **rehidrata el proyecto**: descarga las dependencias declaradas y genera nuevamente la carpeta local `node_modules/`, que no se incluye en GitHub.
+
 ```bash
 npm install
+```
+
+Luego iniciar Expo:
+
+```bash
 npm start
 ```
 
