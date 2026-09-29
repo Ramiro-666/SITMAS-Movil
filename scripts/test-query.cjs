@@ -222,3 +222,164 @@ test('login distingue un rechazo de credenciales de un fallo de conexión', asyn
     (error) => error === disconnected && !(error instanceof ApiError),
   );
 });
+
+const {
+  orderStops,
+  routeSegments,
+  fetchRoadRoute,
+} = require('../src/services/route-geometry.ts');
+const routeStop = (id, hour, lat = -31.4167, lon = -64.1833) => ({
+  Id_Detalle_HDR: id,
+  Id_HojaRuta: 1,
+  HoraEstimada: hour,
+  Latitud: lat,
+  Longitud: lon,
+});
+test('recorrido ordena por horario e ID sin mutar las paradas; horarios inválidos al final', () => {
+  const stops = [
+    routeStop(4, 'mal'),
+    routeStop(3, '09:00'),
+    routeStop(2, '08:00'),
+    routeStop(1, '08:00'),
+  ];
+  const ordered = orderStops(stops);
+  assert.deepEqual(
+    ordered.map((p) => p.stop.Id_Detalle_HDR),
+    [1, 2, 3, 4],
+  );
+  assert.deepEqual(
+    ordered.map((p) => p.number),
+    [1, 2, 3, 4],
+  );
+  assert.equal(stops[0].Id_Detalle_HDR, 4);
+});
+test('paradas sin GPS no se convierten en cero ni se saltean al dibujar tramos', () => {
+  const points = orderStops([
+    routeStop(1, '08:00'),
+    routeStop(2, '09:00', null, null),
+    routeStop(3, '10:00'),
+    routeStop(4, '11:00'),
+    routeStop(5, '12:00', 999, -64),
+  ]);
+  assert.equal(points[1].coordinate, null);
+  assert.equal(points[4].coordinate, null);
+  assert.deepEqual(routeSegments(points), [
+    [points[2].coordinate, points[3].coordinate],
+  ]);
+  assert.deepEqual(routeSegments([]), []);
+  assert.deepEqual(routeSegments([points[0]]), []);
+});
+test('OSRM recibe longitud,latitud y devuelve geometría vial, distancia y duración', async () => {
+  global.fetch = async (url) => {
+    assert.match(
+      url,
+      /-64.1,-31.1;-64.2,-31.2\?overview=full&geometries=geojson/,
+    );
+    return Response.json({
+      code: 'Ok',
+      routes: [
+        {
+          distance: 2500,
+          duration: 600,
+          geometry: {
+            coordinates: [
+              [-64.1, -31.1],
+              [-64.15, -31.12],
+              [-64.2, -31.2],
+            ],
+          },
+        },
+      ],
+    });
+  };
+  const route = await fetchRoadRoute([
+    [
+      { latitude: -31.1, longitude: -64.1 },
+      { latitude: -31.2, longitude: -64.2 },
+    ],
+  ]);
+  assert.equal(route.paths[0].length, 3);
+  assert.deepEqual(route.paths[0][1], { latitude: -31.12, longitude: -64.15 });
+  assert.equal(route.distance, 2500);
+  assert.equal(route.duration, 600);
+});
+test('ruteo rechaza NoRoute y coordenadas corruptas sin inventar líneas rectas', async () => {
+  const segment = [
+    [
+      { latitude: -31, longitude: -64 },
+      { latitude: -32, longitude: -65 },
+    ],
+  ];
+  global.fetch = async () => Response.json({ code: 'NoRoute', routes: [] });
+  await assert.rejects(fetchRoadRoute(segment), /No hay un recorrido/);
+  global.fetch = async () =>
+    Response.json({
+      code: 'Ok',
+      routes: [
+        {
+          distance: 10,
+          duration: 5,
+          geometry: {
+            coordinates: [
+              [null, null],
+              [-64, -31],
+            ],
+          },
+        },
+      ],
+    });
+  await assert.rejects(fetchRoadRoute(segment), /inválido/);
+});
+test('hojas extensas se dividen en lotes manteniendo el punto de unión', async () => {
+  const requested = [];
+  global.fetch = async (url) => {
+    const coords = url
+      .split('/driving/')[1]
+      .split('?')[0]
+      .split(';')
+      .map((pair) => pair.split(',').map(Number));
+    requested.push(coords);
+    return Response.json({
+      code: 'Ok',
+      routes: [
+        { distance: 100, duration: 50, geometry: { coordinates: coords } },
+      ],
+    });
+  };
+  const points = Array.from({ length: 30 }, (_, i) => ({
+    latitude: -31 - i / 100,
+    longitude: -64,
+  }));
+  const route = await fetchRoadRoute([points]);
+  assert.deepEqual(
+    requested.map((points) => points.length),
+    [25, 6],
+  );
+  assert.deepEqual(requested[0].at(-1), requested[1][0]);
+  assert.equal(route.distance, 200);
+});
+test('cambiar de hoja cancela la consulta de recorrido anterior', async () => {
+  let requestSignal;
+  global.fetch = (_, { signal }) =>
+    new Promise((resolve, reject) => {
+      requestSignal = signal;
+      signal.addEventListener(
+        'abort',
+        () => reject(new DOMException('Aborted', 'AbortError')),
+        { once: true },
+      );
+    });
+  const controller = new AbortController();
+  const pending = fetchRoadRoute(
+    [
+      [
+        { latitude: -31, longitude: -64 },
+        { latitude: -32, longitude: -65 },
+      ],
+    ],
+    controller.signal,
+  );
+  controller.abort();
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(requestSignal.aborted, true);
+});

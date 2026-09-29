@@ -48,3 +48,6 @@ npm run web
 | Navegación a módulos operativos | Previsto |
 | Registro de ingresos y reportes | Previsto |
 | Creacion y adaptacion estructural para la sesion del Chofer | Previsto |
+## Mapa de hojas de ruta
+
+La rama de pruebas incorpora recorrido vial, paradas numeradas y selectores sin saltos de pantalla. Para probar con datos ficticios en la PC: `npm run web:demo`. Ver [configuración y guía de pruebas](docs/mapa-hoja-de-ruta.md).

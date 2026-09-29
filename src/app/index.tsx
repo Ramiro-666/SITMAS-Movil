@@ -28,6 +28,7 @@ import {
   useSitmasQuery,
 } from '../query/sitmas';
 import QueryStatus from '../components/QueryStatus';
+import Collapsible from '../components/Collapsible';
 
 type Section = 'inicio' | 'logistica' | 'configuracion';
 type Tool =
@@ -535,6 +536,9 @@ function AppShell() {
             <Text style={styles.userRole}>{session.rol || 'Sin rol'}</Text>
           </View>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Menú principal"
+            accessibilityState={{ expanded: openMenu }}
             onPress={() => setOpenMenu(!openMenu)}
             style={styles.menuButton}
           >
@@ -542,38 +546,40 @@ function AppShell() {
           </Pressable>
         </View>
       </View>
-      {openMenu && (
-        <View style={styles.dropdown}>
-          {(['inicio', 'logistica', 'configuracion'] as Section[]).map(
-            (item) => (
-              <Pressable
-                key={item}
-                disabled={writing}
-                onPress={() => {
-                  setSection(item);
-                  setOpenMenu(false);
-                }}
-                style={styles.menuItem}
-              >
-                <Text style={styles.menuText}>
-                  {item === 'inicio'
-                    ? '⌂  INICIO'
-                    : item === 'logistica'
-                      ? '🚚  LOGÍSTICA'
-                      : '⚙  CONFIGURACIÓN'}
-                </Text>
-              </Pressable>
-            ),
-          )}
-          <Pressable
-            onPress={onLogout}
-            disabled={writing}
-            style={styles.menuItem}
-          >
-            <Text style={styles.menuText}>CERRAR SESIÓN</Text>
-          </Pressable>
-        </View>
-      )}
+      <View style={styles.dropdown} pointerEvents={openMenu ? 'auto' : 'none'}>
+        <Collapsible open={openMenu}>
+          <View style={styles.menuSurface}>
+            {(['inicio', 'logistica', 'configuracion'] as Section[]).map(
+              (item) => (
+                <Pressable
+                  key={item}
+                  disabled={writing}
+                  onPress={() => {
+                    setSection(item);
+                    setOpenMenu(false);
+                  }}
+                  style={styles.menuItem}
+                >
+                  <Text style={styles.menuText}>
+                    {item === 'inicio'
+                      ? '⌂  INICIO'
+                      : item === 'logistica'
+                        ? '🚚  LOGÍSTICA'
+                        : '⚙  CONFIGURACIÓN'}
+                  </Text>
+                </Pressable>
+              ),
+            )}
+            <Pressable
+              onPress={onLogout}
+              disabled={writing}
+              style={styles.menuItem}
+            >
+              <Text style={styles.menuText}>CERRAR SESIÓN</Text>
+            </Pressable>
+          </View>
+        </Collapsible>
+      </View>
       <View style={styles.bar}>
         <Text style={styles.barText}>{section.toUpperCase()}</Text>
       </View>
@@ -659,6 +665,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+  },
+  menuSurface: {
     backgroundColor: '#0093c4',
     padding: 8,
     elevation: 8,

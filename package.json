@@ -41,7 +41,8 @@
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "test": "node --test scripts/test-query.cjs",
     "export:web": "expo export --platform web",
-    "test:mock": "node scripts/mock-sitmas.cjs"
+    "test:mock": "node scripts/mock-sitmas.cjs",
+    "web:demo": "node scripts/start-map-demo.cjs"
   },
   "private": true
 }
