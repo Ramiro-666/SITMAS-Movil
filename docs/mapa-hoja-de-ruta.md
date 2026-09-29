@@ -6,13 +6,9 @@ Trabajo en la rama `test-mapa-hoja-de-ruta`, creada desde `30f07bc`. La rama `ma
 
 Con la API SITMAS iniciada, ejecutar `npm run web` como antes. La URL predeterminada de la API sigue siendo `https://localhost:44325/api`; se puede configurar con `EXPO_PUBLIC_SITMAS_API_URL`.
 
-Para una prueba aislada, ejecutar:
+Abrir http://localhost:8082 e ingresar con la misma cuenta que se utiliza en SITMAS. El servidor de demostración fue retirado: el comando anterior `npm run web:demo` se conserva como alias para iniciar **datos reales** y no levanta el puerto 8097. Antes de reiniciar, detener con Ctrl+C cualquier instancia anterior de Expo o de la demo para descartar su configuración y caché en memoria.
 
-```bash
-npm run web:demo
-```
-
-Este comando inicia una API ficticia en memoria en el puerto 8097 y Expo web en el 8082. Abrir http://localhost:8082 y entrar con usuario `demo` y contraseña `demo`. Ir a **Logística → Hojas de ruta → HR-1**. La hoja 1 contiene tres paradas con coordenadas en Córdoba; HR-2 está vacía. Las escrituras de esta demo no llegan a SITMAS y se pierden al reiniciarla. Detenerla con Ctrl+C antes de iniciar otra demo en los mismos puertos.
+Todos los listados (hojas, paradas, vehículos, choferes, materiales, ubicaciones e indicadores) se consultan por la API. Las altas, ediciones y bajas afectan la base de SITMAS. Si falla una consulta, se informa el error; no se sustituye por datos ficticios. Las únicas respuestas simuladas restantes están dentro de las pruebas unitarias y no se sirven a la app.
 
 El mapa necesita Internet y la variable `EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY` de `.env.local`, con Maps JavaScript API habilitada y localhost permitido en las restricciones de la clave. Esta PC ya tenía esa configuración y se probó su carga. No se versiona la clave. Las variables EXPO_PUBLIC forman parte del cliente: no colocar secretos de servidor en ellas.
 
@@ -47,5 +43,24 @@ Referencias:
 - `npm run typecheck`
 - `npm test`: incluye orden, huecos sin GPS, formato de coordenadas, respuestas inválidas, lotes de hojas largas y cancelación.
 - `npm run export:web`
-- Navegador: mapa y recorrido vial real sobre datos ficticios; tamaño escritorio y 390 px; selección de marcadores; alta de parada; formulario sin desplazamiento al abrir/cerrar selectores; hoja vacía.
+- Navegador: acceso con la cuenta de SITMAS y lectura de sus hojas, paradas y catálogos. La comprobación de datos reales se hace sin crear, editar ni borrar registros.
 
+
+## Comprobación con datos reales — 29/09/2026
+
+- Base consultada: `Gestion_SITMAS`, usando la conexión ya configurada en la API.
+- 14 hojas en SQL Server y 14 en la API: coinciden ID, fecha, vehículo y chofer.
+- 34 paradas en la vista SQL y 34 en la API: coinciden ID, hoja, origen, horario, estado, latitud y longitud; ninguna diferencia encontrada.
+- 30 paradas tienen coordenadas; 4 carecen de ellas en la base y permanecen en la agenda sin inventar un punto en el mapa.
+- Catálogos consultados correctamente: 5 vehículos, 5 choferes, 23 ubicaciones, 40 orígenes, 8 tipos de material, 2 tipos de movimiento, 2 recursos movilizados y 3 estados.
+- Acceso validado en el navegador con la cuenta indicada por el usuario. No se guardan credenciales en el repositorio.
+- La hoja 27 se mostró con sus tres paradas reales. Las comprobaciones de datos fueron de lectura: no se ejecutaron altas, modificaciones ni bajas reales.
+- Los kilómetros y minutos del mapa son estimaciones calculadas por OSRM a partir de las coordenadas guardadas; no reemplazan la distancia almacenada en la base.
+
+La auditoría se puede repetir desde PowerShell, indicando el archivo de configuración de la API:
+
+```powershell
+./scripts/verify-sitmas-data.ps1 -SitmasConfig 'RUTA_AL_PROYECTO_SITMAS/WebApi/API_SITMAS/Web.config'
+```
+
+El script hace consultas SELECT y GET, no muestra la cadena de conexión y termina con error si encuentra diferencias. Los recuentos anteriores corresponden al momento de la verificación; pueden cambiar al registrar nuevas operaciones.
