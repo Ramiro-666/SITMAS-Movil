@@ -100,6 +100,13 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (
+    /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]):8097(?:\/|$)/i.test(baseUrl)
+  ) {
+    throw new Error(
+      'La demo fue retirada. Configurá la URL de la API real de SITMAS y reiniciá Expo.',
+    );
+  }
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (init?.signal?.aborted) controller.abort();

@@ -1,6 +1,6 @@
 # SITMAS Móvil
 
-Primera versión de una aplicación móvil desarrollada con Expo y React Native. Presenta una maqueta de consulta operativa para el Sistema Integral de Trazabilidad de Materiales (SITMAS), inspirada visualmente en el proyecto principal.
+Aplicación de Expo y React Native conectada a la API de SITMAS y su base SQL Server. TanStack Query gestiona los datos remotos y Zustand mantiene la sesión del usuario en memoria.
 
 ## Integrantes
 
@@ -18,7 +18,7 @@ Después de clonar o descargar el repositorio, ejecutar el siguiente comando des
 npm install
 ```
 
-Luego iniciar Expo:
+Primero iniciar la API del proyecto SITMAS en `https://localhost:44325`. La app usa sus usuarios y registros reales; no se conecta directamente a SQL Server. Luego iniciar Expo:
 
 ```bash
 npm start
@@ -34,15 +34,15 @@ npm run web
 
 | Feature | Estado |
 | --- | --- |
-| Pantalla de acceso demostrativa con animación BioCba | Completado |
-| Acceso sin validación de credenciales | Completado |
+| Pantalla de acceso con animación BioCba | Completado |
+| Autenticación contra la API de SITMAS | Completado |
 | Fondo animado con colores institucionales SITMAS | Completado |
 | Menú superior desplegable para móvil | Completado |
 | Secciones Inicio, Logística y Configuración | Completado |
 | Identidad visual y logotipos SITMAS incluidos localmente | Completado |
-| Listado desplazable de materiales estáticos | Completado |
+| Materiales e indicadores obtenidos de SITMAS | Completado |
 | Tarjeta de material reutilizable mediante props | Completado |
-| Registro demostrativo de tipo de vehículo | Completado |
+| Gestión de tipos de vehículo en SITMAS | Completado |
 | Preferencias de configuración interactivas | Completado |
 | Datos desde API y autenticación real utilizando TanStack y Zustand| Completado |
 | Navegación a módulos operativos | Previsto |
@@ -50,4 +50,4 @@ npm run web
 | Creacion y adaptacion estructural para la sesion del Chofer | Previsto |
 ## Mapa de hojas de ruta
 
-La rama de pruebas incorpora recorrido vial, paradas numeradas y selectores sin saltos de pantalla. Para probar con datos ficticios en la PC: `npm run web:demo`. Ver [configuración y guía de pruebas](docs/mapa-hoja-de-ruta.md).
+La rama de pruebas incorpora recorrido vial, paradas numeradas y selectores sin saltos de pantalla. Ejecutar `npm run web` y abrir http://localhost:8082 con la cuenta habitual de SITMAS. El antiguo comando `npm run web:demo` también usa ahora datos reales. Ver [configuración y guía de pruebas](docs/mapa-hoja-de-ruta.md).

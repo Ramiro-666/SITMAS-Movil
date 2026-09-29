@@ -37,12 +37,11 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
+    "web": "node scripts/start-sitmas-web.cjs",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "test": "node --test scripts/test-query.cjs",
     "export:web": "expo export --platform web",
-    "test:mock": "node scripts/mock-sitmas.cjs",
-    "web:demo": "node scripts/start-map-demo.cjs"
+    "web:demo": "node scripts/start-sitmas-web.cjs --legacy-demo"
   },
   "private": true
 }
