@@ -2,7 +2,8 @@ import { Text, TextInput } from './AppText';
 import { useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Modal,
   PanResponder,
   Pressable,
@@ -26,6 +27,10 @@ import {
 } from '../query/sitmas';
 import QueryStatus from './QueryStatus';
 import StopLocationPicker from './maps/StopLocationPicker';
+import RouteMap from './maps/RouteMap';
+import SelectField from './SelectField';
+import Collapsible from './Collapsible';
+import { orderStops } from '../services/route-geometry';
 import { validCoordinates, type MapPoint } from './maps/types';
 import { saveStopWithLocation } from '../services/save-stop';
 
@@ -58,59 +63,6 @@ const idOf = (item: CatalogItem, key: string) =>
   Number(item[key] ?? item.Id ?? 0);
 const labelOf = (item: CatalogItem, key: string) =>
   String(item[key] ?? 'Sin descripción');
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-  disabled = false,
-}: {
-  disabled?: boolean;
-  label: string;
-  value: number;
-  options: { id: number; text: string }[];
-  onChange: (id: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable
-        style={styles.select}
-        disabled={disabled}
-        onPress={() => setOpen(!open)}
-      >
-        <Text style={styles.selectText}>
-          {options.find((x) => x.id === value)?.text ||
-            `Seleccionar ${label.toLowerCase()}`}
-        </Text>
-        <Text style={styles.chevron}>{open ? '⌃' : '⌄'}</Text>
-      </Pressable>
-      {open && (
-        <ScrollView
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          style={styles.options}
-        >
-          {options.map((x) => (
-            <Pressable
-              disabled={disabled}
-              key={x.id}
-              onPress={() => {
-                onChange(x.id);
-                setOpen(false);
-              }}
-              style={styles.option}
-            >
-              <Text style={styles.selectText}>{x.text}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-}
 
 function StopBlock({
   stop,
@@ -231,7 +183,10 @@ export default function RoutePlanner({
           detailQuery.data.ChoferNombreCompleto,
       }
     : null;
-  const stops = stopsQuery.data ?? [];
+  const stops = useMemo(
+    () => orderStops(stopsQuery.data ?? []).map((point) => point.stop),
+    [stopsQuery.data],
+  );
   const catalogs = {
     movement: movementQuery.data ?? [],
     resource: resourceQuery.data ?? [],
@@ -550,178 +505,180 @@ export default function RoutePlanner({
   ];
   return (
     <View style={{ flex: 1 }}>
-      <FlatList
+      <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
-        data={listOpen ? routes : []}
-        keyExtractor={(route) => String(route.Id)}
-        ListHeaderComponent={
-          <>
-            {header}
-            <QueryStatus queries={statusQueries} />{' '}
-            <View style={styles.topBar}>
-              <Text style={styles.title}>HOJAS DE RUTA</Text>
+      >
+        {header}
+        <QueryStatus queries={statusQueries} />
+        <View style={styles.topBar}>
+          <Text style={styles.title}>HOJAS DE RUTA</Text>
+          <Pressable
+            disabled={busy}
+            onPress={() => {
+              setEditingRoute(null);
+              setRouteDraft({ date: '', vehicle: 0, driver: 0 });
+              setRouteFormOpen(!routeFormOpen);
+            }}
+            style={styles.primary}
+          >
+            <Text style={styles.primaryText}>+ NUEVA</Text>
+          </Pressable>
+        </View>
+        {!!error && <Text style={styles.error}>{error}</Text>}
+        <Collapsible open={routeFormOpen}>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>
+              {editingRoute ? 'Editar hoja de ruta' : 'Nueva hoja de ruta'}
+            </Text>
+            <Text style={styles.label}>FECHA · AAAA-MM-DD</Text>
+            <TextInput
+              editable={!busy}
+              value={routeDraft.date}
+              onChangeText={(date) => setRouteDraft((d) => ({ ...d, date }))}
+              placeholder="2026-09-16"
+              style={styles.input}
+            />
+            <SelectField
+              disabled={busy}
+              label="Vehículo"
+              value={routeDraft.vehicle}
+              options={vehiclesOptions}
+              onChange={(vehicle) => setRouteDraft((d) => ({ ...d, vehicle }))}
+            />
+            <SelectField
+              disabled={busy}
+              label="Chofer"
+              value={routeDraft.driver}
+              options={driversOptions}
+              onChange={(driver) => setRouteDraft((d) => ({ ...d, driver }))}
+            />
+            <Pressable
+              disabled={busy}
+              onPress={saveRoute}
+              style={styles.primary}
+            >
+              <Text style={styles.primaryText}>
+                {editingRoute ? 'GUARDAR CAMBIOS' : 'CREAR HOJA'}
+              </Text>
+            </Pressable>
+          </View>
+        </Collapsible>
+        <View style={styles.panel}>
+          <Pressable
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: listOpen }}
+            onPress={() => setListOpen(!listOpen)}
+            style={styles.listHeader}
+          >
+            <Text style={styles.panelTitle}>HOJAS DE RUTA EXISTENTES</Text>
+            <Text style={styles.chevron}>{listOpen ? '⌃' : '⌄'}</Text>
+          </Pressable>
+        </View>
+        <Collapsible open={listOpen}>
+          <ScrollView
+            nestedScrollEnabled
+            style={{ maxHeight: 320 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {routes.map((route) => (
+              <Pressable
+                key={route.Id}
+                onPress={() => choose(route)}
+                style={styles.routeRow}
+              >
+                <Text style={styles.routeId}>HR-{route.Id}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.routeMain}>
+                    {route.FechaFormateada || dateISO(route)} · {route.Vehiculo}
+                  </Text>
+                  <Text style={styles.small}>{route.ChoferNombreCompleto}</Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+            {routesQuery.isSuccess && routes.length === 0 && (
+              <Text style={styles.small}>No hay hojas de ruta.</Text>
+            )}
+          </ScrollView>
+        </Collapsible>
+        {selected && (
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>
+              HOJA #{selected.Id} · {selected.FechaFormateada}
+            </Text>
+            <Text style={styles.small}>
+              {selected.Vehiculo} · {selected.ChoferNombreCompleto}
+            </Text>
+            <View style={styles.actions}>
               <Pressable
                 disabled={busy}
-                onPress={() => {
-                  setEditingRoute(null);
-                  setRouteDraft({ date: '', vehicle: 0, driver: 0 });
-                  setRouteFormOpen(!routeFormOpen);
-                }}
+                onPress={editRoute}
+                style={styles.outline}
+              >
+                <Text style={styles.outlineText}>EDITAR HOJA</Text>
+              </Pressable>
+              <Pressable
+                disabled={busy}
+                onPress={askDeleteRoute}
+                style={styles.outline}
+              >
+                <Text style={styles.deleteText}>ELIMINAR</Text>
+              </Pressable>
+            </View>
+            <QueryStatus queries={[stopsQuery]} />
+            <RouteMap
+              key={selected.Id}
+              routeId={selected.Id}
+              stops={stops}
+              loading={stopsQuery.isPending}
+              failed={stopsQuery.isError}
+              disabled={busy}
+              onEdit={editStop}
+            />
+            <View style={styles.actions}>
+              <Text style={styles.panelTitle}>PARADAS · HORARIOS</Text>
+              <Pressable
+                disabled={busy}
+                onPress={() => editStop()}
                 style={styles.primary}
               >
-                <Text style={styles.primaryText}>+ NUEVA</Text>
+                <Text style={styles.primaryText}>+ PARADA</Text>
               </Pressable>
             </View>
-            {!!error && <Text style={styles.error}>{error}</Text>}
-            {routeFormOpen && (
-              <View style={styles.panel}>
-                <Text style={styles.panelTitle}>
-                  {editingRoute ? 'Editar hoja de ruta' : 'Nueva hoja de ruta'}
-                </Text>
-                <Text style={styles.label}>FECHA · AAAA-MM-DD</Text>
-                <TextInput
-                  editable={!busy}
-                  value={routeDraft.date}
-                  onChangeText={(date) =>
-                    setRouteDraft((d) => ({ ...d, date }))
-                  }
-                  placeholder="2026-09-16"
-                  style={styles.input}
-                />
-                <SelectField
-                  disabled={busy}
-                  label="Vehículo"
-                  value={routeDraft.vehicle}
-                  options={vehiclesOptions}
-                  onChange={(vehicle) =>
-                    setRouteDraft((d) => ({ ...d, vehicle }))
-                  }
-                />
-                <SelectField
-                  disabled={busy}
-                  label="Chofer"
-                  value={routeDraft.driver}
-                  options={driversOptions}
-                  onChange={(driver) =>
-                    setRouteDraft((d) => ({ ...d, driver }))
-                  }
-                />
-                <Pressable
-                  disabled={busy}
-                  onPress={saveRoute}
-                  style={styles.primary}
-                >
-                  <Text style={styles.primaryText}>
-                    {editingRoute ? 'GUARDAR CAMBIOS' : 'CREAR HOJA'}
+            <Text style={styles.small}>
+              Arrastrá una tarjeta para cambiar su horario. Tocala para
+              editarla.
+            </Text>
+            <View style={styles.calendar}>
+              {Array.from({ length: 32 }, (_, i) => (
+                <View key={i} style={styles.slot}>
+                  <Text style={styles.slotTime}>
+                    {time(START + i * 30).slice(0, 5)}
                   </Text>
-                </Pressable>
-              </View>
-            )}
-            <View style={styles.panel}>
-              <Pressable
-                disabled={busy}
-                onPress={() => setListOpen(!listOpen)}
-                style={styles.listHeader}
-              >
-                <Text style={styles.panelTitle}>HOJAS DE RUTA EXISTENTES</Text>
-                <Text style={styles.chevron}>{listOpen ? '⌃' : '⌄'}</Text>
-              </Pressable>
+                  <View style={styles.slotLine} />
+                </View>
+              ))}
+              {stops.map((stop) => (
+                <StopBlock
+                  key={stop.Id_Detalle_HDR}
+                  stop={stop}
+                  onDrop={drop}
+                  onOpen={editStop}
+                />
+              ))}
             </View>
-          </>
-        }
-        renderItem={({ item: route }) => (
-          <Pressable
-            key={route.Id}
-            onPress={() => choose(route)}
-            style={styles.routeRow}
-          >
-            <Text style={styles.routeId}>HR-{route.Id}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.routeMain}>
-                {route.FechaFormateada || dateISO(route)} · {route.Vehiculo}
+            {stopsQuery.isSuccess && stops.length === 0 && (
+              <Text style={styles.small}>
+                Esta hoja todavía no tiene paradas.
               </Text>
-              <Text style={styles.small}>{route.ChoferNombreCompleto}</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        )}
-        ListEmptyComponent={
-          listOpen && routesQuery.isSuccess ? (
-            <Text style={styles.small}>No hay hojas de ruta.</Text>
-          ) : null
-        }
-        ListFooterComponent={
-          <>
-            {selected && (
-              <View style={styles.panel}>
-                <Text style={styles.panelTitle}>
-                  HOJA #{selected.Id} · {selected.FechaFormateada}
-                </Text>
-                <Text style={styles.small}>
-                  {selected.Vehiculo} · {selected.ChoferNombreCompleto}
-                </Text>
-                <View style={styles.actions}>
-                  <Pressable
-                    disabled={busy}
-                    onPress={editRoute}
-                    style={styles.outline}
-                  >
-                    <Text style={styles.outlineText}>EDITAR HOJA</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={busy}
-                    onPress={askDeleteRoute}
-                    style={styles.outline}
-                  >
-                    <Text style={styles.deleteText}>ELIMINAR</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.actions}>
-                  <Text style={styles.panelTitle}>PARADAS · AGENDA</Text>
-                  <Pressable
-                    disabled={busy}
-                    onPress={() => editStop()}
-                    style={styles.primary}
-                  >
-                    <Text style={styles.primaryText}>+ PARADA</Text>
-                  </Pressable>
-                </View>
-                <Text style={styles.small}>
-                  Arrastrá una tarjeta para cambiar su horario. Tocala para
-                  editarla.
-                </Text>
-                <QueryStatus queries={[stopsQuery]} />
-                <View style={styles.calendar}>
-                  {Array.from({ length: 32 }, (_, i) => (
-                    <View key={i} style={styles.slot}>
-                      <Text style={styles.slotTime}>
-                        {time(START + i * 30).slice(0, 5)}
-                      </Text>
-                      <View style={styles.slotLine} />
-                    </View>
-                  ))}
-                  {stops.map((stop) => (
-                    <StopBlock
-                      key={stop.Id_Detalle_HDR}
-                      stop={stop}
-                      onDrop={drop}
-                      onOpen={editStop}
-                    />
-                  ))}
-                </View>
-                {stopsQuery.isSuccess && stops.length === 0 && (
-                  <Text style={styles.small}>
-                    Esta hoja todavía no tiene paradas.
-                  </Text>
-                )}
-              </View>
             )}
-            {footer}
-          </>
-        }
-      />
+          </View>
+        )}
+        {footer}
+      </ScrollView>
       <Modal
         transparent
         visible={stopFormOpen && !!selected}
@@ -730,8 +687,14 @@ export default function RoutePlanner({
         }}
         animationType="slide"
       >
-        <View style={styles.modalBackdrop}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.modalContent}
+          >
             <View style={styles.panel}>
               {!!error && (
                 <Text accessibilityRole="alert" style={styles.error}>
@@ -892,7 +855,7 @@ export default function RoutePlanner({
               )}
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <Modal
         transparent
@@ -902,8 +865,14 @@ export default function RoutePlanner({
         }}
         animationType="slide"
       >
-        <View style={styles.modalBackdrop}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.modalContent}
+          >
             <View style={styles.panel}>
               {!!error && (
                 <Text accessibilityRole="alert" style={styles.error}>
@@ -990,7 +959,7 @@ export default function RoutePlanner({
               </View>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <Modal
         transparent
@@ -1085,7 +1054,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 5,
   },
-  fieldGroup: { marginTop: 8 },
   input: {
     borderWidth: 1,
     borderColor: '#cbdde1',
@@ -1094,26 +1062,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: '#173542',
   },
-  select: {
-    borderWidth: 1,
-    borderColor: '#cbdde1',
-    minHeight: 45,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  selectText: { color: '#173542', fontSize: 12, flexShrink: 1 },
   chevron: { color: '#006d38', fontSize: 18, fontWeight: '700' },
-  options: {
-    borderWidth: 1,
-    borderColor: '#dce8df',
-    borderRadius: 8,
-    maxHeight: 220,
-    overflow: 'hidden',
-  },
-  option: { padding: 11, borderBottomWidth: 1, borderColor: '#e6eee9' },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1174,7 +1123,7 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(12,35,42,.6)' },
   modalContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     padding: 18,
     paddingVertical: 40,
   },

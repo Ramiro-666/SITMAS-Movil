@@ -43,10 +43,26 @@ const db = {
       HoraEstimada: '08:00:00',
       Origen: 'Origen demo',
       DistanciaDesdeAnterior_Km: 12,
+      Id_Ubicacion: 1,
     },
   ],
   odometers: [],
 };
+// Hoja 1 con un recorrido real entre coordenadas ficticias; hoja 2 vacía.
+for (let i = 0; i < 2; i++) {
+  db.stops.push({
+    ...db.stops[0],
+    Id_Detalle_HDR: i + 2,
+    HoraEstimada: i ? '10:00:00' : '09:00:00',
+    Id_Ubicacion: i ? 3 : 2,
+  });
+}
+db.locations.push({
+  IdUbicacion: 3,
+  Descripcion: 'Destino de prueba',
+  Latitud: -31.435,
+  Longitud: -64.185,
+});
 function headers(r) {
   return {
     ...r,
@@ -113,7 +129,10 @@ http
         recursosmovilizados: [
           { IdRecursoMov: 1, Recurso_Movilizado: 'Material' },
         ],
-        origen: [{ IdOrigen: 1, EmpresaInstitucion: 'Origen demo' }],
+        origen: Array.from({ length: 14 }, (_, i) => ({
+          IdOrigen: i + 1,
+          EmpresaInstitucion: i ? 'Origen de prueba ' + (i + 1) : 'Origen demo',
+        })),
         'tp_material/listartodo': [
           { IdTipoMaterial: 1, TipoMaterial: 'Papel' },
         ],
@@ -285,6 +304,7 @@ http
         : fs.readFileSync(file),
     );
   })
-  .listen(port, '127.0.0.1', () =>
-    console.log('SITMAS simulado: http://localhost:' + port),
-  );
+  .listen(port, '127.0.0.1', () => {
+    console.log('SITMAS simulado: http://localhost:' + port);
+    process.send?.('ready');
+  });
