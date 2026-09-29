@@ -2,6 +2,7 @@
 
 # dependencies
 node_modules/
+.npm-cache/
 
 # Expo
 .expo/
@@ -41,3 +42,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Plan de adaptación local
+/PLAN_TANSTACK_ZUSTAND.md
