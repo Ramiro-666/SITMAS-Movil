@@ -16,6 +16,7 @@ export const keys = {
   tipos: ['tiposVehiculo'],
   odometros: ['odometros'],
   choferes: ['choferes'],
+  pendientes: ['tareasPendientes'],
   hojas: ['hojasRuta'],
   hoja: (id: number) => ['hojasRuta', id] as const,
   paradas: (id: number) => ['hojasRuta', id, 'paradas'] as const,
@@ -44,6 +45,7 @@ function options<T>(
 
 // Una misma clave comparte respuesta, carga y caché entre todas las pantallas.
 export const queries = {
+  pendientes: options(keys.pendientes, sitmasApi.tareasPendientes),
   vehiculos: options(keys.vehiculos, sitmasApi.vehiculos),
   marcas: options(keys.marcas, sitmasApi.marcas, true),
   modelos: options(keys.modelos, sitmasApi.modelos, true),

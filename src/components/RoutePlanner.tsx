@@ -1,1130 +1,219 @@
-import { Text, TextInput } from './AppText';
-import { useMemo, useRef, useState } from 'react';
-import {
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
-  PanResponder,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {
-  CatalogItem,
-  HojaRuta,
-  Parada,
-  sitmasApi,
-} from '../services/sitmas-api';
-
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  keys,
-  queries,
-  useSitmasMutation,
-  useSitmasQuery,
-} from '../query/sitmas';
-import QueryStatus from './QueryStatus';
-import StopLocationPicker from './maps/StopLocationPicker';
-import RouteMap from './maps/RouteMap';
+import { Text, TextInput } from './AppText';
 import SelectField from './SelectField';
-import Collapsible from './Collapsible';
-import { orderStops } from '../services/route-geometry';
-import { validCoordinates, type MapPoint } from './maps/types';
-import { saveStopWithLocation } from '../services/save-stop';
+import { Action, BoardModal, ui } from './route-board/BoardUI';
+import { TransferProvider, TaskDrag, DropTarget } from './route-board/Transfer';
+import CircuitMap from './route-board/CircuitMap';
+import { keys, queries, useSitmasQuery, useSitmasMutation } from '../query/sitmas';
+import { sitmasApi, type Parada, type HojaRuta, type CatalogItem } from '../services/sitmas-api';
+import { assignPendingTask, deleteTask } from '../services/assign-task';
+import { currentTaskCoordinates } from '../services/optimized-circuit';
+import { validCoordinates } from './maps/types';
+import { useRouteBoardStore } from '../state/route-board-store';
 
-const START = 6 * 60;
-const END = 22 * 60;
-const SLOT_HEIGHT = 40;
-const minutes = (value?: string) => {
-  const found = /^(\d{1,2}):(\d{2})/.exec(value || '');
-  return found ? Number(found[1]) * 60 + Number(found[2]) : START;
-};
-const time = (value: number) =>
-  `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}:00`;
-const dateISO = (route?: HojaRuta | null) => {
-  if (route?.HojaRutaFecha && !route.HojaRutaFecha.startsWith('0001'))
-    return route.HojaRutaFecha.slice(0, 10);
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(
-    route?.FechaFormateada || '',
-  );
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
-};
-const validDate = (value: string) =>
-  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-  !Number.isNaN(Date.parse(value)) &&
-  new Date(value).toISOString().slice(0, 10) === value;
-const validTime = (value: string) => {
-  const found = /^(\d{2}):(\d{2})$/.exec(value);
-  return !!found && Number(found[1]) < 24 && Number(found[2]) < 60;
-};
-const idOf = (item: CatalogItem, key: string) =>
-  Number(item[key] ?? item.Id ?? 0);
-const labelOf = (item: CatalogItem, key: string) =>
-  String(item[key] ?? 'Sin descripción');
-
-function StopBlock({
-  stop,
-  onDrop,
-  onOpen,
-}: {
-  stop: Parada;
-  onDrop: (stop: Parada, deltaY: number) => void;
-  onOpen: (stop: Parada) => void;
-}) {
-  const offset = useRef(new Animated.Value(0)).current;
-  const start = Math.max(
-    START,
-    Math.min(
-      END - 30,
-      minutes(stop.HoraEstimadaFormateada || stop.HoraEstimada),
-    ),
-  );
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 7,
-        onPanResponderMove: (_, g) => offset.setValue(g.dy),
-        onPanResponderRelease: (_, g) => {
-          offset.setValue(0);
-          if (Math.abs(g.dy) > 15) onDrop(stop, g.dy);
-        },
-        onPanResponderTerminate: () => offset.setValue(0),
-      }),
-    [offset, onDrop, stop],
-  );
-  return (
-    <Animated.View
-      {...pan.panHandlers}
-      style={[
-        styles.stop,
-        {
-          top: ((start - START) / 30) * SLOT_HEIGHT,
-          transform: [{ translateY: offset }],
-        },
-      ]}
-    >
-      <Pressable onPress={() => onOpen(stop)}>
-        <Text style={styles.stopTime}>
-          {time(start).slice(0, 5)} · {stop.EstadoRecorrido || 'Pendiente'}
-        </Text>
-        <Text style={styles.stopName}>
-          {stop.Origen || 'Origen sin descripción'}
-        </Text>
-        <Text style={styles.stopDetail}>
-          {stop.TipoMovimiento || 'Movimiento'} ·{' '}
-          {stop.TipoMaterial || 'Material'}
-        </Text>
-        <Text style={styles.dragHint}>
-          ↕ Arrastrar para cambiar la hora · Tocar para editar
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-type StopDraft = Pick<
-  Parada,
-  | 'Id_TipoMovimiento'
-  | 'Id_RecursoMov'
-  | 'Id_Origen'
-  | 'Id_TipoMaterial'
-  | 'Id_Estado'
-  | 'HoraEstimada'
->;
-const emptyStop: StopDraft = {
-  Id_TipoMovimiento: 0,
-  Id_RecursoMov: 0,
-  Id_Origen: 0,
-  Id_TipoMaterial: 0,
-  Id_Estado: 0,
-  HoraEstimada: '08:00:00',
-};
-
-export default function RoutePlanner({
-  header,
-  footer,
-}: {
-  header: React.ReactElement;
-  footer: React.ReactElement;
-}) {
-  const client = useQueryClient();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const routesQuery = useSitmasQuery(queries.hojas);
-  const vehiclesQuery = useSitmasQuery(queries.vehiculos);
-  const driversQuery = useSitmasQuery(queries.choferes);
-  const movementQuery = useSitmasQuery(queries.movimientos);
-  const resourceQuery = useSitmasQuery(queries.recursos);
-  const originQuery = useSitmasQuery(queries.origenes);
-  const materialQuery = useSitmasQuery(queries.materiales);
-  const stateQuery = useSitmasQuery(queries.estados);
-  const detailQuery = useSitmasQuery(
-    queries.hoja(selectedId ?? 0),
-    selectedId !== null,
-  );
-  const stopsQuery = useSitmasQuery(
-    queries.paradas(selectedId ?? 0),
-    selectedId !== null,
-  );
-  const routes = routesQuery.data ?? [],
-    vehicles = vehiclesQuery.data ?? [],
-    drivers = driversQuery.data ?? [];
-  const summary = routes.find((route) => route.Id === selectedId);
-  const selected = detailQuery.data
-    ? {
-        ...summary,
-        ...detailQuery.data,
-        FechaFormateada:
-          summary?.FechaFormateada || detailQuery.data.FechaFormateada,
-        Vehiculo: summary?.Vehiculo || detailQuery.data.Vehiculo,
-        ChoferNombreCompleto:
-          summary?.ChoferNombreCompleto ||
-          detailQuery.data.ChoferNombreCompleto,
-      }
-    : null;
-  const stops = useMemo(
-    () => orderStops(stopsQuery.data ?? []).map((point) => point.stop),
-    [stopsQuery.data],
-  );
-  const catalogs = {
-    movement: movementQuery.data ?? [],
-    resource: resourceQuery.data ?? [],
-    origin: originQuery.data ?? [],
-    material: materialQuery.data ?? [],
-    state: stateQuery.data ?? [],
-  };
-  const operation = useSitmasMutation(
-    async (action: () => Promise<unknown>) => action(),
-    [keys.hojas, keys.ubicaciones],
-  );
-  const busy = operation.isPending;
-  const [confirmation, setConfirmation] = useState<{
-    kind: 'route' | 'stop';
-    id: number;
-  } | null>(null);
-  const [listOpen, setListOpen] = useState(true);
-  const [routeFormOpen, setRouteFormOpen] = useState(false);
-  const [routeDraft, setRouteDraft] = useState({
-    date: '',
-    vehicle: 0,
-    driver: 0,
-  });
-  const [editingRoute, setEditingRoute] = useState<number | null>(null);
-  const [stopFormOpen, setStopFormOpen] = useState(false);
-  const [editingStop, setEditingStop] = useState<Parada | null>(null);
-  const [stopDraft, setStopDraft] = useState<StopDraft>(emptyStop);
-  const [locationMode, setLocationMode] = useState(false);
-  const [locationDraft, setLocationDraft] = useState<MapPoint | null>(null);
-  const locationsQuery = useSitmasQuery(
-    queries.ubicaciones,
-    stopFormOpen && locationMode,
-  );
-  const selectedLocation =
-    locationDraft ??
-    locationsQuery.data?.find(
-      (location) => location.IdUbicacion === editingStop?.Id_Ubicacion,
-    ) ??
-    null;
-  const [moveStop, setMoveStop] = useState<Parada | null>(null);
-  const [moveDate, setMoveDate] = useState('');
-  const [moveTime, setMoveTime] = useState('');
-  const [keepResources, setKeepResources] = useState(true);
-  const [moveVehicle, setMoveVehicle] = useState(0);
-  const [moveDriver, setMoveDriver] = useState(0);
-  const [error, setError] = useState('');
-
-  function choose(route: HojaRuta) {
-    if (busy) return;
-    setSelectedId(route.Id);
-    setError('');
-    setListOpen(false);
-    setStopFormOpen(false);
-    setMoveStop(null);
-    setRouteFormOpen(false);
-  }
-  function editRoute() {
-    if (!selected) return;
-    setEditingRoute(selected.Id);
-    setRouteDraft({
-      date: dateISO(selected),
-      vehicle: selected.Id_Vehiculo || 0,
-      driver: selected.Id_Chofer || 0,
-    });
-    setRouteFormOpen(true);
-  }
-  async function saveRoute() {
-    if (busy) return;
-    if (
-      !validDate(routeDraft.date) ||
-      !routeDraft.vehicle ||
-      !routeDraft.driver
-    ) {
-      setError('Seleccioná una fecha válida, vehículo y chofer.');
-      return;
-    }
-    setError('');
-    try {
-      const payload = {
-        HojaRutaFecha: routeDraft.date,
-        Id_Vehiculo: routeDraft.vehicle,
-        Id_Chofer: routeDraft.driver,
-      };
-      await operation.run(() =>
-        editingRoute
-          ? sitmasApi.actualizarHojaRuta(editingRoute, payload)
-          : sitmasApi.crearHojaRuta(payload),
-      );
-      setRouteFormOpen(false);
-      setEditingRoute(null);
-      setRouteDraft({ date: '', vehicle: 0, driver: 0 });
-    } catch {
-      setError(
-        'No se pudo confirmar el guardado. Revisá los datos y el listado antes de reintentar.',
-      );
-    }
-  }
-  function askDeleteRoute() {
-    if (selected && !busy) setConfirmation({ kind: 'route', id: selected.Id });
-  }
-  function editStop(stop?: Parada) {
-    if (busy) return;
-    setError('');
-    setEditingStop(stop || null);
-    setLocationMode(!!stop?.Id_Ubicacion);
-    setLocationDraft(
-      stop?.Id_Ubicacion && validCoordinates(stop)
-        ? {
-            IdUbicacion: stop.Id_Ubicacion,
-            Latitud: stop.Latitud!,
-            Longitud: stop.Longitud!,
-            Descripcion: stop.Origen || 'Ubicación de la parada',
-          }
-        : null,
-    );
-    setStopDraft(
-      stop
-        ? {
-            Id_TipoMovimiento: stop.Id_TipoMovimiento,
-            Id_RecursoMov: stop.Id_RecursoMov,
-            Id_Origen: stop.Id_Origen,
-            Id_TipoMaterial: stop.Id_TipoMaterial,
-            Id_Estado: stop.Id_Estado,
-            HoraEstimada:
-              stop.HoraEstimadaFormateada || stop.HoraEstimada || '08:00:00',
-          }
-        : emptyStop,
-    );
-    setStopFormOpen(true);
-  }
-  async function saveStop() {
-    if (busy) return;
-    if (
-      !selected ||
-      !stopDraft.Id_TipoMovimiento ||
-      (!locationMode &&
-        (!stopDraft.Id_RecursoMov ||
-          !stopDraft.Id_Origen ||
-          !stopDraft.Id_TipoMaterial)) ||
-      (locationMode &&
-        (!selectedLocation ||
-          !validCoordinates(selectedLocation) ||
-          !selectedLocation.Descripcion.trim())) ||
-      !stopDraft.Id_Estado ||
-      !validTime((stopDraft.HoraEstimada || '').slice(0, 5))
-    ) {
-      setError('Completá los datos de la parada y una hora válida.');
-      return;
-    }
-    setError('');
-    try {
-      const payload = {
-        ...editingStop,
-        ...stopDraft,
-        HoraEstimada: time(minutes(stopDraft.HoraEstimada)),
-        Id_HojaRuta: selected.Id,
-      };
-      await operation.run(() =>
-        saveStopWithLocation(
-          payload,
-          locationMode ? selectedLocation : null,
-          setLocationDraft,
-        ),
-      );
-      setStopFormOpen(false);
-      setEditingStop(null);
-    } catch {
-      setError(
-        'No se pudo confirmar la parada. Conservamos el formulario y cualquier ubicación ya creada; revisá la agenda antes de reintentar.',
-      );
-    }
-  }
-  function askDeleteStop() {
-    if (editingStop && !busy)
-      setConfirmation({ kind: 'stop', id: editingStop.Id_Detalle_HDR });
-  }
-  async function confirmDelete() {
-    if (!confirmation || busy) return;
-    const target = confirmation;
-    setError('');
-    try {
-      await operation.run(async () => {
-        if (target.kind === 'route') {
-          await sitmasApi.borrarHojaRuta(target.id);
-          setSelectedId(null);
-          setListOpen(true);
-          client.removeQueries({ queryKey: keys.hoja(target.id) });
-        } else await sitmasApi.borrarParada(target.id);
-      });
-      setConfirmation(null);
-      setStopFormOpen(false);
-    } catch {
-      setError(
-        'No se pudo confirmar la eliminación. Revisá el listado antes de reintentar.',
-      );
-      setConfirmation(null);
-    }
-  }
-  async function drop(stop: Parada, deltaY: number) {
-    if (!selected || busy) return;
-    const current = minutes(stop.HoraEstimadaFormateada || stop.HoraEstimada);
-    const next = Math.max(
-      START,
-      Math.min(
-        END - 30,
-        Math.round((current + (deltaY * 30) / SLOT_HEIGHT) / 30) * 30,
-      ),
-    );
-    if (next === current) return;
-    setError('');
-    // Conservamos el horario confirmado hasta que el servidor acepte el cambio.
-    try {
-      await operation.run(() =>
-        sitmasApi.actualizarParada({ ...stop, HoraEstimada: time(next) }),
-      );
-    } catch {
-      setError(
-        'No se pudo confirmar el nuevo horario. Se volvió a consultar la agenda.',
-      );
-    }
-  }
-  function openMove(stop: Parada) {
-    if (busy) return;
-    setError('');
-    setMoveStop(stop);
-    setMoveDate(dateISO(selected));
-    setMoveTime(
-      (stop.HoraEstimadaFormateada || stop.HoraEstimada || '08:00').slice(0, 5),
-    );
-    setKeepResources(true);
-    setMoveVehicle(selected?.Id_Vehiculo || 0);
-    setMoveDriver(selected?.Id_Chofer || 0);
-  }
-  async function confirmMove() {
-    if (busy) return;
-    if (
-      !moveStop ||
-      !selected ||
-      !validDate(moveDate) ||
-      !validTime(moveTime) ||
-      !moveVehicle ||
-      !moveDriver
-    ) {
-      setError('Ingresá fecha, hora, vehículo y chofer válidos.');
-      return;
-    }
-    setError('');
-    try {
-      await operation.run(async () => {
-        let destinationId = selected.Id;
-        const sameAssignment =
-          moveDate === dateISO(selected) &&
-          moveVehicle === selected.Id_Vehiculo &&
-          moveDriver === selected.Id_Chofer;
-        if (!sameAssignment) {
-          const freshRoutes = await client.fetchQuery({
-            ...queries.hojas,
-            staleTime: 0,
-          });
-          const candidates = freshRoutes.filter(
-            (route) => dateISO(route) === moveDate,
-          );
-          const headers = await Promise.all(
-            candidates.map((route) =>
-              client.fetchQuery({ ...queries.hoja(route.Id), staleTime: 0 }),
-            ),
-          );
-          const existing = headers.find(
-            (route) =>
-              route.Id_Vehiculo === moveVehicle &&
-              route.Id_Chofer === moveDriver,
-          );
-          destinationId =
-            existing?.Id ||
-            (
-              await sitmasApi.crearHojaRuta({
-                HojaRutaFecha: moveDate,
-                Id_Vehiculo: moveVehicle,
-                Id_Chofer: moveDriver,
-              })
-            ).IdGenerado;
-          if (!destinationId)
-            throw new Error(
-              'El servidor no devolvió el ID de la hoja destino.',
-            );
-        }
-        await sitmasApi.actualizarParada({
-          ...moveStop,
-          Id_HojaRuta: destinationId,
-          HoraEstimada: time(minutes(moveTime)),
-        });
-      });
-      setMoveStop(null);
-    } catch {
-      setError(
-        'No se pudo confirmar el traslado. Se actualizaron las hojas; si se creó una nueva, verificá su estado antes de reintentar.',
-      );
-    }
-  }
-
-  const vehiclesOptions = vehicles.map((v) => ({ id: v.Id, text: v.Patente }));
-  const driversOptions = drivers.map((d) => ({
-    id: d.Id,
-    text: `${d.Apellido || ''} ${d.Nombre || ''}`.trim(),
-  }));
-  const statusQueries = [
-    routesQuery,
-    vehiclesQuery,
-    driversQuery,
-    movementQuery,
-    resourceQuery,
-    originQuery,
-    materialQuery,
-    stateQuery,
-    ...(selectedId !== null ? [detailQuery] : []),
-  ];
-  return (
-    <View style={{ flex: 1 }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 20 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        {header}
-        <QueryStatus queries={statusQueries} />
-        <View style={styles.topBar}>
-          <Text style={styles.title}>HOJAS DE RUTA</Text>
-          <Pressable
-            disabled={busy}
-            onPress={() => {
-              setEditingRoute(null);
-              setRouteDraft({ date: '', vehicle: 0, driver: 0 });
-              setRouteFormOpen(!routeFormOpen);
-            }}
-            style={styles.primary}
-          >
-            <Text style={styles.primaryText}>+ NUEVA</Text>
-          </Pressable>
-        </View>
-        {!!error && <Text style={styles.error}>{error}</Text>}
-        <Collapsible open={routeFormOpen}>
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>
-              {editingRoute ? 'Editar hoja de ruta' : 'Nueva hoja de ruta'}
-            </Text>
-            <Text style={styles.label}>FECHA · AAAA-MM-DD</Text>
-            <TextInput
-              editable={!busy}
-              value={routeDraft.date}
-              onChangeText={(date) => setRouteDraft((d) => ({ ...d, date }))}
-              placeholder="2026-09-16"
-              style={styles.input}
-            />
-            <SelectField
-              disabled={busy}
-              label="Vehículo"
-              value={routeDraft.vehicle}
-              options={vehiclesOptions}
-              onChange={(vehicle) => setRouteDraft((d) => ({ ...d, vehicle }))}
-            />
-            <SelectField
-              disabled={busy}
-              label="Chofer"
-              value={routeDraft.driver}
-              options={driversOptions}
-              onChange={(driver) => setRouteDraft((d) => ({ ...d, driver }))}
-            />
-            <Pressable
-              disabled={busy}
-              onPress={saveRoute}
-              style={styles.primary}
-            >
-              <Text style={styles.primaryText}>
-                {editingRoute ? 'GUARDAR CAMBIOS' : 'CREAR HOJA'}
-              </Text>
-            </Pressable>
-          </View>
-        </Collapsible>
-        <View style={styles.panel}>
-          <Pressable
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: listOpen }}
-            onPress={() => setListOpen(!listOpen)}
-            style={styles.listHeader}
-          >
-            <Text style={styles.panelTitle}>HOJAS DE RUTA EXISTENTES</Text>
-            <Text style={styles.chevron}>{listOpen ? '⌃' : '⌄'}</Text>
-          </Pressable>
-        </View>
-        <Collapsible open={listOpen}>
-          <ScrollView
-            nestedScrollEnabled
-            style={{ maxHeight: 320 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {routes.map((route) => (
-              <Pressable
-                key={route.Id}
-                onPress={() => choose(route)}
-                style={styles.routeRow}
-              >
-                <Text style={styles.routeId}>HR-{route.Id}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.routeMain}>
-                    {route.FechaFormateada || dateISO(route)} · {route.Vehiculo}
-                  </Text>
-                  <Text style={styles.small}>{route.ChoferNombreCompleto}</Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            ))}
-            {routesQuery.isSuccess && routes.length === 0 && (
-              <Text style={styles.small}>No hay hojas de ruta.</Text>
-            )}
-          </ScrollView>
-        </Collapsible>
-        {selected && (
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>
-              HOJA #{selected.Id} · {selected.FechaFormateada}
-            </Text>
-            <Text style={styles.small}>
-              {selected.Vehiculo} · {selected.ChoferNombreCompleto}
-            </Text>
-            <View style={styles.actions}>
-              <Pressable
-                disabled={busy}
-                onPress={editRoute}
-                style={styles.outline}
-              >
-                <Text style={styles.outlineText}>EDITAR HOJA</Text>
-              </Pressable>
-              <Pressable
-                disabled={busy}
-                onPress={askDeleteRoute}
-                style={styles.outline}
-              >
-                <Text style={styles.deleteText}>ELIMINAR</Text>
-              </Pressable>
-            </View>
-            <QueryStatus queries={[stopsQuery]} />
-            <RouteMap
-              key={selected.Id}
-              routeId={selected.Id}
-              stops={stops}
-              loading={stopsQuery.isPending}
-              failed={stopsQuery.isError}
-              disabled={busy}
-              onEdit={editStop}
-            />
-            <View style={styles.actions}>
-              <Text style={styles.panelTitle}>PARADAS · HORARIOS</Text>
-              <Pressable
-                disabled={busy}
-                onPress={() => editStop()}
-                style={styles.primary}
-              >
-                <Text style={styles.primaryText}>+ PARADA</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.small}>
-              Arrastrá una tarjeta para cambiar su horario. Tocala para
-              editarla.
-            </Text>
-            <View style={styles.calendar}>
-              {Array.from({ length: 32 }, (_, i) => (
-                <View key={i} style={styles.slot}>
-                  <Text style={styles.slotTime}>
-                    {time(START + i * 30).slice(0, 5)}
-                  </Text>
-                  <View style={styles.slotLine} />
-                </View>
-              ))}
-              {stops.map((stop) => (
-                <StopBlock
-                  key={stop.Id_Detalle_HDR}
-                  stop={stop}
-                  onDrop={drop}
-                  onOpen={editStop}
-                />
-              ))}
-            </View>
-            {stopsQuery.isSuccess && stops.length === 0 && (
-              <Text style={styles.small}>
-                Esta hoja todavía no tiene paradas.
-              </Text>
-            )}
-          </View>
-        )}
-        {footer}
-      </ScrollView>
-      <Modal
-        transparent
-        visible={stopFormOpen && !!selected}
-        onRequestClose={() => {
-          if (!busy) setStopFormOpen(false);
-        }}
-        animationType="slide"
-      >
-        <KeyboardAvoidingView
-          style={styles.modalBackdrop}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.modalContent}
-          >
-            <View style={styles.panel}>
-              {!!error && (
-                <Text accessibilityRole="alert" style={styles.error}>
-                  {error}
-                </Text>
-              )}
-              <Text style={styles.panelTitle}>
-                {editingStop
-                  ? `EDITAR PARADA #${editingStop.Id_Detalle_HDR}`
-                  : 'AGREGAR PARADA'}
-              </Text>
-              <SelectField
-                disabled={busy}
-                label="Tipo de movimiento"
-                value={stopDraft.Id_TipoMovimiento}
-                options={catalogs.movement.map((x) => ({
-                  id: idOf(x, 'IdTipoMovimientos'),
-                  text: labelOf(x, 'TipoMovimientos'),
-                }))}
-                onChange={(v) =>
-                  setStopDraft((d) => ({ ...d, Id_TipoMovimiento: v }))
-                }
-              />
-              <SelectField
-                disabled={busy}
-                label={
-                  locationMode
-                    ? 'Recurso movilizado (opcional)'
-                    : 'Recurso movilizado'
-                }
-                value={stopDraft.Id_RecursoMov}
-                options={catalogs.resource.map((x) => ({
-                  id: idOf(x, 'IdRecursoMov'),
-                  text: labelOf(x, 'Recurso_Movilizado'),
-                }))}
-                onChange={(v) =>
-                  setStopDraft((d) => ({ ...d, Id_RecursoMov: v }))
-                }
-              />
-              <View style={styles.actions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: !locationMode }}
-                  disabled={busy}
-                  style={styles.outline}
-                  onPress={() => setLocationMode(false)}
-                >
-                  <Text style={styles.outlineText}>
-                    {!locationMode ? '✓ ' : ''}ORIGEN
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: locationMode }}
-                  disabled={busy}
-                  style={styles.outline}
-                  onPress={() => setLocationMode(true)}
-                >
-                  <Text style={styles.outlineText}>
-                    {locationMode ? '✓ ' : ''}ELEGIR EN MAPA
-                  </Text>
-                </Pressable>
-              </View>
-              {locationMode ? (
-                <>
-                  <QueryStatus queries={[locationsQuery]} />
-                  <StopLocationPicker
-                    locations={locationsQuery.data ?? []}
-                    value={selectedLocation}
-                    disabled={busy}
-                    onChange={setLocationDraft}
-                  />
-                </>
-              ) : (
-                <SelectField
-                  disabled={busy}
-                  label="Lugar / origen"
-                  value={stopDraft.Id_Origen}
-                  options={catalogs.origin.map((x) => ({
-                    id: idOf(x, 'IdOrigen'),
-                    text: labelOf(x, 'EmpresaInstitucion'),
-                  }))}
-                  onChange={(v) =>
-                    setStopDraft((d) => ({ ...d, Id_Origen: v }))
-                  }
-                />
-              )}
-              <SelectField
-                disabled={busy}
-                label={
-                  locationMode ? 'Tipo material (opcional)' : 'Tipo material'
-                }
-                value={stopDraft.Id_TipoMaterial}
-                options={catalogs.material.map((x) => ({
-                  id: idOf(x, 'IdTipoMaterial'),
-                  text: labelOf(x, 'TipoMaterial'),
-                }))}
-                onChange={(v) =>
-                  setStopDraft((d) => ({ ...d, Id_TipoMaterial: v }))
-                }
-              />
-              <Text style={styles.label}>HORA ESTIMADA · HH:MM</Text>
-              <TextInput
-                editable={!busy}
-                value={(stopDraft.HoraEstimada || '').slice(0, 5)}
-                onChangeText={(v) =>
-                  setStopDraft((d) => ({ ...d, HoraEstimada: v }))
-                }
-                placeholder="08:00"
-                style={styles.input}
-              />
-              <SelectField
-                disabled={busy}
-                label="Estado"
-                value={stopDraft.Id_Estado}
-                options={catalogs.state.map((x) => ({
-                  id: idOf(x, 'Id'),
-                  text: labelOf(x, 'EstadoHojaRuta'),
-                }))}
-                onChange={(v) => setStopDraft((d) => ({ ...d, Id_Estado: v }))}
-              />
-              <View style={styles.actions}>
-                <Pressable
-                  disabled={busy}
-                  onPress={() => setStopFormOpen(false)}
-                  style={styles.outline}
-                >
-                  <Text style={styles.outlineText}>CANCELAR</Text>
-                </Pressable>
-                <Pressable
-                  disabled={busy}
-                  onPress={saveStop}
-                  style={styles.primary}
-                >
-                  <Text style={styles.primaryText}>GUARDAR PARADA</Text>
-                </Pressable>
-              </View>
-              {editingStop && (
-                <View style={styles.actions}>
-                  <Pressable
-                    disabled={busy}
-                    onPress={() => {
-                      setStopFormOpen(false);
-                      openMove(editingStop);
-                    }}
-                    style={styles.outline}
-                  >
-                    <Text style={styles.outlineText}>CAMBIAR DÍA</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={busy}
-                    onPress={askDeleteStop}
-                    style={styles.outline}
-                  >
-                    <Text style={styles.deleteText}>ELIMINAR PARADA</Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-      <Modal
-        transparent
-        visible={!!moveStop}
-        onRequestClose={() => {
-          if (!busy) setMoveStop(null);
-        }}
-        animationType="slide"
-      >
-        <KeyboardAvoidingView
-          style={styles.modalBackdrop}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.modalContent}
-          >
-            <View style={styles.panel}>
-              {!!error && (
-                <Text accessibilityRole="alert" style={styles.error}>
-                  {error}
-                </Text>
-              )}
-              <Text style={styles.panelTitle}>
-                REPROGRAMAR PARADA #{moveStop?.Id_Detalle_HDR}
-              </Text>
-              <Text style={styles.label}>NUEVA FECHA · AAAA-MM-DD</Text>
-              <TextInput
-                editable={!busy}
-                value={moveDate}
-                onChangeText={setMoveDate}
-                style={styles.input}
-              />
-              <Text style={styles.label}>NUEVA HORA · HH:MM</Text>
-              <TextInput
-                editable={!busy}
-                value={moveTime}
-                onChangeText={setMoveTime}
-                style={styles.input}
-              />
-              <Text style={styles.question}>
-                ¿Desea conservar los datos del vehículo y/o chofer?
-              </Text>
-              <View style={styles.actions}>
-                <Pressable
-                  disabled={busy}
-                  onPress={() => {
-                    setKeepResources(true);
-                    setMoveVehicle(selected?.Id_Vehiculo || 0);
-                    setMoveDriver(selected?.Id_Chofer || 0);
-                  }}
-                  style={styles.outline}
-                >
-                  <Text style={styles.outlineText}>
-                    {keepResources ? '✓ ' : ''}CONSERVAR
-                  </Text>
-                </Pressable>
-                <Pressable
-                  disabled={busy}
-                  onPress={() => setKeepResources(false)}
-                  style={styles.outline}
-                >
-                  <Text style={styles.outlineText}>
-                    {!keepResources ? '✓ ' : ''}CAMBIAR
-                  </Text>
-                </Pressable>
-              </View>
-              {!keepResources && (
-                <>
-                  <SelectField
-                    disabled={busy}
-                    label="Vehículo nuevo"
-                    value={moveVehicle}
-                    options={vehiclesOptions}
-                    onChange={setMoveVehicle}
-                  />
-                  <SelectField
-                    disabled={busy}
-                    label="Chofer nuevo"
-                    value={moveDriver}
-                    options={driversOptions}
-                    onChange={setMoveDriver}
-                  />
-                </>
-              )}
-              <View style={styles.actions}>
-                <Pressable
-                  disabled={busy}
-                  onPress={() => setMoveStop(null)}
-                  style={styles.outline}
-                >
-                  <Text style={styles.outlineText}>CANCELAR</Text>
-                </Pressable>
-                <Pressable
-                  disabled={busy}
-                  onPress={confirmMove}
-                  style={styles.primary}
-                >
-                  <Text style={styles.primaryText}>CONFIRMAR</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-      <Modal
-        transparent
-        visible={!!confirmation}
-        animationType="fade"
-        onRequestClose={() => {
-          if (!busy) setConfirmation(null);
-        }}
-      >
-        <View
-          style={[
-            styles.modalBackdrop,
-            { justifyContent: 'center', padding: 24 },
-          ]}
-        >
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>
-              {confirmation?.kind === 'route'
-                ? 'Eliminar hoja y sus paradas'
-                : 'Eliminar parada'}
-            </Text>
-            <Text style={styles.small}>Esta acción no se puede deshacer.</Text>
-            <View style={styles.actions}>
-              <Pressable
-                disabled={busy}
-                style={styles.outline}
-                onPress={() => setConfirmation(null)}
-              >
-                <Text style={styles.outlineText}>CANCELAR</Text>
-              </Pressable>
-              <Pressable
-                disabled={busy}
-                style={styles.primary}
-                onPress={() => void confirmDelete()}
-              >
-                <Text style={styles.primaryText}>
-                  {busy ? 'ELIMINANDO…' : 'CONFIRMAR ELIMINACIÓN'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+const emptyTask = { Id_TipoMovimiento: 0, Id_RecursoMov: 0, Id_Origen: 0, Id_TipoMaterial: 0 };
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const options = (items: CatalogItem[], id: string, label: string) => items.map((item) => ({ id: Number(item[id]), text: String(item[label] ?? '') }));
+const writable = (route: HojaRuta) => !route.Id_Estado || route.Id_Estado === 1 || route.Id_Estado === 2;
+function TaskCard({ task, pending = false, disabled, onAssign, onDelete }: { task: Parada; pending?: boolean; disabled: boolean; onAssign?: () => void; onDelete: () => void }) {
+  const content = <View style={styles.task}>
+    <View style={ui.row}><Text style={styles.taskTitle}>{task.Origen || `Tarea #${task.Id_Detalle_HDR}`}</Text><Text style={styles.tag}>{task.TipoMovimiento || 'Tarea'}</Text></View>
+    <Text style={ui.muted}>#{task.Id_Detalle_HDR} · {task.TipoMaterial || 'General'}{task.RecursoMovilizado ? ` · ${task.RecursoMovilizado}` : ''}</Text>
+    {!validCoordinates(task) && <Text style={styles.warning}>Sin coordenadas · ubicación pendiente en SITMAS</Text>}
+    <View style={styles.taskFooter}>
+      <Text style={styles.dragHint}>⠿ Arrastrar</Text>
+      <View style={styles.taskActions}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${pending ? 'Asignar' : 'Mover'} tarea #${task.Id_Detalle_HDR}`} disabled={disabled} onPress={onAssign} style={[styles.taskAction, disabled && styles.disabledAction]}><Text style={styles.moveText}>{pending ? 'Asignar' : 'Mover'}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Eliminar tarea #${task.Id_Detalle_HDR}`} disabled={disabled} onPress={onDelete} style={[styles.taskAction, styles.deleteAction, disabled && styles.disabledAction]}><Text style={styles.deleteText}>Eliminar</Text></Pressable>
+      </View>
     </View>
-  );
+  </View>;
+  return <TaskDrag taskId={task.Id_Detalle_HDR} disabled={disabled}>{content}</TaskDrag>;
 }
-
+function RouteCard({ route, origins, busy, onAssign, onMap, onSelect, onDelete }: { route: HojaRuta; origins: CatalogItem[]; busy: boolean; onAssign: (taskId: number, routeId: number) => void; onMap: () => void; onSelect: (task: Parada) => void; onDelete: (task: Parada) => void }) {
+  const detail = useSitmasQuery(queries.paradas(route.Id));
+  const tasks = currentTaskCoordinates(detail.data ?? [], origins);
+  return <DropTarget routeId={route.Id} disabled={busy || !writable(route)} onDrop={(id) => onAssign(id, route.Id)}>
+    <View style={styles.route}>
+      <View style={styles.routeHeader}>
+        <View style={ui.row}><Text style={styles.routeTitle}>HR #{route.Id}</Text><Text style={styles.plate}>{route.Vehiculo || 'Sin vehículo'}</Text></View>
+        <View style={ui.row}><Text style={[ui.muted, styles.routeHeaderText]}>{route.FechaFormateada}</Text><Action title={`Ver en mapa · HR ${route.Id}`} secondary onPress={onMap} disabled={busy} /></View>
+      </View>
+      <View style={styles.routeBody}>
+        <View style={ui.row}><Text style={[styles.tag, route.Estado === 'Asignado' && styles.assigned]}>{route.Estado || 'Pendiente'}</Text><Text style={ui.muted}>Total registrado: {(route.Distancia_Total_Estimada_Km ?? 0).toFixed(2)} km</Text></View>
+        {!!route.ChoferNombreCompleto?.trim() && <Text style={ui.muted}>{route.ChoferNombreCompleto}</Text>}
+        {detail.isPending && <Text style={ui.muted}>Cargando tareas…</Text>}
+        {detail.isError && <Action title={`Reintentar tareas HR ${route.Id}`} secondary onPress={() => { void detail.refetch(); }} />}
+        {tasks.map((task) => <TaskCard key={task.Id_Detalle_HDR} task={task} disabled={busy || !writable(route)} onAssign={() => onSelect(task)} onDelete={() => onDelete(task)} />)}
+        {!tasks.length && detail.isSuccess && <View style={styles.emptyDrop}><Text style={styles.emptyIcon}>＋</Text><Text style={ui.muted}>{writable(route) ? 'Soltá una tarea aquí' : 'Sin tareas asignadas'}</Text></View>}
+        {!!tasks.length && writable(route) && <Text style={ui.muted}>Soltá aquí otra tarea · {tasks.length} asignada(s)</Text>}
+      </View>
+    </View>
+  </DropTarget>;
+}
+export default function RoutePlanner({ header, footer }: { header: React.ReactElement; footer: React.ReactElement }) {
+  const client = useQueryClient();
+  const { width } = useWindowDimensions();
+  const wide = width >= 850;
+  const routesQuery = useSitmasQuery(queries.hojas);
+  const pendingQuery = useSitmasQuery(queries.pendientes);
+  const originsQuery = useSitmasQuery(queries.origenes);
+  const vehiclesQuery = useSitmasQuery(queries.vehiculos);
+  const movementsQuery = useSitmasQuery(queries.movimientos);
+  const resourcesQuery = useSitmasQuery(queries.recursos);
+  const materialsQuery = useSitmasQuery(queries.materiales);
+  const statesQuery = useSitmasQuery(queries.estados);
+  const routes = [...(routesQuery.data ?? [])].sort((a, b) => b.Id - a.Id);
+  const origins = originsQuery.data ?? [];
+  const pending = currentTaskCoordinates(pendingQuery.data ?? [], origins);
+  const board = useRouteBoardStore();
+  useEffect(() => () => useRouteBoardStore.getState().reset(), []);
+  const [form, setForm] = useState<'task' | 'route' | null>(null);
+  const [draft, setDraft] = useState(emptyTask);
+  const [routeDraft, setRouteDraft] = useState({ date: today(), vehicle: 0 });
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [deleting, setDeleting] = useState<Parada | null>(null);
+  const inFlight = useRef(false);
+  const mutation = useSitmasMutation(async (action: () => Promise<unknown>) => action(), [keys.pendientes, keys.hojas]);
+  const busy = mutation.isPending;
+  const stateId = (name: string) => Number(statesQuery.data?.find((s) => String(s.EstadoHojaRuta).toLowerCase() === name.toLowerCase())?.Id || 0);
+  const statuses = [routesQuery, pendingQuery, originsQuery, vehiclesQuery, movementsQuery, resourcesQuery, materialsQuery, statesQuery];
+  const refreshing = statuses.some((q) => q.isFetching);
+  async function refresh() {
+    setError(''); setNotice('');
+    await Promise.all([client.invalidateQueries({ queryKey: keys.hojas }), ...statuses.map((q) => q.refetch())]);
+  }
+  async function perform(action: () => Promise<unknown>, done: (value: unknown) => void) {
+    if (inFlight.current) return;
+    inFlight.current = true; setError(''); setNotice('');
+    try { const result = await mutation.run(action); done(result); }
+    catch (e) { setError(e instanceof Error && !('status' in e) ? e.message : 'SITMAS no pudo confirmar el cambio. Actualizamos el tablero; revisalo antes de reintentar.'); }
+    finally { inFlight.current = false; }
+  }
+  function assign(taskId: number, routeId: number) {
+    const assignedState = stateId('Asignado');
+    if (!assignedState) { setError('No se pudo identificar el estado Asignado. Actualizá los datos.'); return; }
+    const task = pending.find((t) => t.Id_Detalle_HDR === taskId) ?? routes.flatMap((r) => client.getQueryData<Parada[]>(keys.paradas(r.Id)) ?? []).find((t) => t.Id_Detalle_HDR === taskId);
+    if (!task) { setError('La tarea ya no está disponible. Actualizá el tablero.'); return; }
+    void perform(() => assignPendingTask(taskId, routeId, assignedState, origins, task.Id_HojaRuta || null), (message) => { board.selectTask(null); setNotice(String(message)); });
+  }
+  function createTask() {
+    if (!draft.Id_TipoMovimiento || !draft.Id_Origen) { setError('Seleccioná el movimiento y el origen de la tarea.'); return; }
+    const state = stateId('Pendiente');
+    if (!state) { setError('No se pudo identificar el estado Pendiente.'); return; }
+    void perform(() => sitmasApi.crearParada({ ...draft, Id_HojaRuta: null, Id_Estado: state, HoraEstimada: '00:00:00', DistanciaDesdeAnterior_Km: 0 }), () => { setForm(null); setDraft(emptyTask); setNotice('Tarea creada en la lista de pendientes.'); });
+  }
+  function createRoute() {
+    const valid = /^\d{4}-\d{2}-\d{2}$/.test(routeDraft.date) && !Number.isNaN(Date.parse(routeDraft.date)) && new Date(routeDraft.date).toISOString().slice(0, 10) === routeDraft.date;
+    if (!valid || !routeDraft.vehicle) { setError('Ingresá una fecha válida y seleccioná el vehículo.'); return; }
+    const state = stateId('Pendiente');
+    if (!state) { setError('No se pudo identificar el estado Pendiente.'); return; }
+    void perform(() => sitmasApi.crearHojaRuta({ HojaRutaFecha: routeDraft.date, Id_Vehiculo: routeDraft.vehicle, Id_Chofer: null, Id_Estado: state }), () => { setForm(null); setRouteDraft({ date: today(), vehicle: 0 }); setNotice('Cabecera creada. Ya podés asignarle tareas.'); });
+  }
+  const chosenOrigin = origins.find((o) => Number(o.IdOrigen) === draft.Id_Origen);
+  const selectedMap = routes.find((r) => r.Id === board.mapId);
+  const selectedTask = [...pending, ...routes.flatMap((r) => client.getQueryData<Parada[]>(keys.paradas(r.Id)) ?? [])].find((t) => t.Id_Detalle_HDR === board.assignmentId);
+  return <TransferProvider>
+    <ScrollView nativeID="route-board-scroll" style={{ flex: 1 }} scrollEnabled={board.draggingId === null} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
+      {header}
+      <View style={styles.hero}>
+        <View style={{ gap: 5 }}><Text style={styles.eyebrow}>LOGÍSTICA · SITMAS</Text><Text accessibilityRole="header" style={styles.heading}>Hojas de ruta</Text><Text style={ui.muted}>Creá tareas, asignalas a un vehículo y consultá su recorrido.</Text></View>
+        <View style={ui.row}><Action title="Nueva cabecera" secondary disabled={busy} onPress={() => { setError(''); setForm('route'); }} /><Action title="Nueva tarea" disabled={busy} onPress={() => { setError(''); setForm('task'); }} /></View>
+      </View>
+      <View style={ui.row}><Text style={ui.muted}>{routes.length} hojas · {pending.length} tareas pendientes</Text><Action title={refreshing ? 'Actualizando…' : 'Actualizar datos'} secondary disabled={busy || refreshing} onPress={() => { void refresh(); }} /></View>
+      {statuses.some((q) => q.isError) && <Text accessibilityRole="alert" style={ui.error}>No se pudieron actualizar todos los datos de SITMAS. Usá «Actualizar datos» para reintentar.</Text>}
+      {busy && <Text accessibilityLiveRegion="polite" style={ui.notice}>Guardando en SITMAS y actualizando el recorrido…</Text>}
+      {!!notice && <Text accessibilityLiveRegion="polite" style={ui.notice}>{notice}</Text>}
+      {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+      <View style={[styles.board, { flexDirection: wide ? 'row' : 'column' }]}>
+        <View style={[styles.pendingPanel, wide ? { width: 310 } : { width: '100%' }]}>
+          <View style={styles.pendingHeader}><Text style={styles.panelTitle}>Lista de pendientes</Text><Text style={styles.count}>{pending.length}</Text></View>
+          <View style={{ padding: 12, gap: 10 }}>
+            {pendingQuery.isPending && <Text style={ui.muted}>Cargando tareas…</Text>}
+            {pendingQuery.isSuccess && !pending.length && <View style={styles.emptyDrop}><Text style={styles.emptyIcon}>✓</Text><Text style={styles.taskTitle}>Todo asignado</Text><Text style={ui.muted}>Las nuevas tareas aparecerán aquí.</Text></View>}
+            {pending.map((task) => <TaskCard key={task.Id_Detalle_HDR} task={task} pending disabled={busy} onDelete={() => { setError(''); setDeleting(task); }} onAssign={() => { setError(''); board.selectTask(task.Id_Detalle_HDR); }} />)}
+          </View>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+          <View style={styles.workHeader}><Text style={styles.workTitle}>Hojas de ruta en trabajo</Text><Text style={styles.workHint}>Asigná pendientes o trasladá tareas entre hojas</Text></View>
+          {routesQuery.isPending && <Text style={ui.muted}>Cargando hojas…</Text>}
+          {routesQuery.isSuccess && !routes.length && <Text style={ui.notice}>Creá una cabecera para empezar a organizar las tareas.</Text>}
+          <View style={styles.grid}>{routes.map((route) => <View key={route.Id} style={{ width: width >= 1280 ? '48.8%' : '100%' }}><RouteCard route={route} origins={origins} busy={busy} onAssign={assign} onSelect={(task) => { setError(''); board.selectTask(task.Id_Detalle_HDR); }} onDelete={(task) => { setError(''); setDeleting(task); }} onMap={() => { setError(''); setNotice(''); board.openMap(route.Id); }} /></View>)}</View>
+        </View>
+      </View>
+      {footer}
+    </ScrollView>
+    {form && <BoardModal title={form === 'task' ? 'Nueva tarea pendiente' : 'Nueva cabecera'} busy={busy} onClose={() => { setForm(null); setError(''); }}>
+      {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+      {form === 'task' ? <>
+        <Text style={ui.muted}>Se guardará en pendientes. Después podés asignarla a una hoja de ruta.</Text>
+        <SelectField label="Tipo de movimiento" value={draft.Id_TipoMovimiento} disabled={busy} options={options(movementsQuery.data ?? [], 'IdTipoMovimientos', 'TipoMovimientos')} onChange={(v) => setDraft((d) => ({ ...d, Id_TipoMovimiento: v }))} />
+        <SelectField label="Origen de la tarea" value={draft.Id_Origen} disabled={busy} options={origins.map((o) => ({ id: Number(o.IdOrigen), text: `${o.EmpresaInstitucion} · #${o.IdOrigen}${typeof o.Latitud !== 'number' || typeof o.Longitud !== 'number' ? ' · Sin GPS' : ''}` }))} onChange={(v) => setDraft((d) => ({ ...d, Id_Origen: v }))} />
+        {chosenOrigin && (typeof chosenOrigin.Latitud !== 'number' || typeof chosenOrigin.Longitud !== 'number') && <Text style={styles.warning}>Este origen no tiene coordenadas. La tarea se puede asignar, pero el circuito quedará incompleto hasta que se actualice en SITMAS.</Text>}
+        <SelectField label="Recurso movilizado (opcional)" value={draft.Id_RecursoMov} disabled={busy} options={[{ id: 0, text: 'Sin especificar' }, ...options(resourcesQuery.data ?? [], 'IdRecursoMov', 'Recurso_Movilizado')]} onChange={(v) => setDraft((d) => ({ ...d, Id_RecursoMov: v }))} />
+        <SelectField label="Material (opcional)" value={draft.Id_TipoMaterial} disabled={busy} options={[{ id: 0, text: 'General' }, ...options(materialsQuery.data ?? [], 'IdTipoMaterial', 'TipoMaterial')]} onChange={(v) => setDraft((d) => ({ ...d, Id_TipoMaterial: v }))} />
+        <Action title="Crear tarea pendiente" onPress={createTask} disabled={busy || statesQuery.isPending} />
+      </> : <>
+        <Text style={ui.muted}>Indicá la fecha y el vehículo. No es necesario asignar un chofer para crear la cabecera.</Text>
+        <Text style={ui.text}>Fecha · AAAA-MM-DD</Text><TextInput accessibilityLabel="Fecha de la cabecera" editable={!busy} style={ui.input} value={routeDraft.date} onChangeText={(date) => setRouteDraft((d) => ({ ...d, date }))} placeholder="AAAA-MM-DD" />
+        <SelectField label="Vehículo" value={routeDraft.vehicle} disabled={busy} options={(vehiclesQuery.data ?? []).map((v) => ({ id: v.Id, text: v.Patente }))} onChange={(vehicle) => setRouteDraft((d) => ({ ...d, vehicle }))} />
+        <Action title="Crear cabecera" onPress={createRoute} disabled={busy || statesQuery.isPending} />
+      </>}
+    </BoardModal>}
+    {board.assignmentId !== null && <BoardModal title={`Asignar tarea #${board.assignmentId}`} busy={busy} onClose={() => board.selectTask(null)}>
+      {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+      <Text style={ui.text}>{selectedTask?.Origen || 'La tarea ya no está disponible.'}</Text>
+      {routes.filter((r) => writable(r) && r.Id !== selectedTask?.Id_HojaRuta).map((route) => <Action key={route.Id} title={`Asignar a HR ${route.Id} · ${route.FechaFormateada} · ${route.Vehiculo}`} disabled={busy || !selectedTask} secondary onPress={() => assign(board.assignmentId!, route.Id)} />)}
+      {!routes.some(writable) && <Text style={ui.muted}>Primero creá una cabecera disponible.</Text>}
+    </BoardModal>}
+    {deleting && <BoardModal title={`Eliminar tarea #${deleting.Id_Detalle_HDR}`} busy={busy} onClose={() => setDeleting(null)}>
+      {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+      <Text style={ui.text}>Se eliminará la tarea de {deleting.Origen || 'este origen'}{deleting.Id_HojaRuta ? ` de la hoja HR ${deleting.Id_HojaRuta}` : ' de pendientes'}. Esta acción no se puede deshacer.</Text>
+      <Action title="Confirmar eliminación" disabled={busy} onPress={() => { void perform(() => deleteTask(deleting.Id_Detalle_HDR, deleting.Id_HojaRuta || null, origins), (message) => { setDeleting(null); setNotice(String(message)); }); }} />
+    </BoardModal>}
+    {selectedMap && <BoardModal title={`Recorrido · HR ${selectedMap.Id} · ${selectedMap.FechaFormateada}`} busy={busy} onClose={() => board.openMap(null)}>
+      {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+      {!!notice && <Text style={ui.notice}>{notice}</Text>}
+      <CircuitMap routeId={selectedMap.Id} origins={origins} pending={pending} busy={busy} canAssign={writable(selectedMap)} onAssign={assign} />
+    </BoardModal>}
+  </TransferProvider>;
+}
 const styles = StyleSheet.create({
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  title: { color: '#006d38', fontWeight: '800', fontSize: 17 },
-  panel: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    elevation: 2,
-  },
-  panelTitle: {
-    color: '#006d38',
-    fontSize: 13,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 28,
-  },
-  routeRow: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderColor: '#e5eee8',
-  },
-  routeId: { color: '#662d91', fontWeight: '800', fontSize: 11 },
-  routeMain: { color: '#1b3d45', fontSize: 12, fontWeight: '700' },
-  small: { color: '#6c8390', fontSize: 11, marginTop: 4 },
-  label: {
-    color: '#006d38',
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 12,
-    marginBottom: 5,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#cbdde1',
-    height: 45,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    color: '#173542',
-  },
-  chevron: { color: '#006d38', fontSize: 18, fontWeight: '700' },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 12,
-    flexWrap: 'wrap',
-  },
-  primary: {
-    backgroundColor: '#007b3e',
-    borderRadius: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  primaryText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  outline: {
-    borderWidth: 1,
-    borderColor: '#a7c9bb',
-    borderRadius: 7,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-  },
-  outlineText: { color: '#006d38', fontSize: 10, fontWeight: '800' },
-  deleteText: { color: '#b62d31', fontSize: 10, fontWeight: '800' },
-  error: { color: '#b62d31', fontSize: 11, marginBottom: 10 },
-  calendar: { height: 32 * SLOT_HEIGHT, position: 'relative', marginTop: 14 },
-  slot: { height: SLOT_HEIGHT, flexDirection: 'row' },
-  slotTime: { color: '#758790', width: 44, fontSize: 10 },
-  slotLine: {
-    borderTopWidth: 1,
-    borderColor: '#e4ebe8',
-    flex: 1,
-    marginTop: 6,
-  },
-  stop: {
-    position: 'absolute',
-    left: 48,
-    right: 0,
-    minHeight: 62,
-    borderRadius: 8,
-    backgroundColor: '#087947',
-    borderLeftWidth: 5,
-    borderColor: '#73bd28',
-    padding: 7,
-    elevation: 4,
-    zIndex: 1,
-  },
-  stopTime: { color: '#c7f1d6', fontWeight: '800', fontSize: 10 },
-  stopName: { color: '#fff', fontWeight: '800', fontSize: 12 },
-  stopDetail: { color: '#ebfff2', fontSize: 10 },
-  dragHint: { color: '#d5eee0', fontSize: 9, marginTop: 4 },
-  question: {
-    color: '#1b3d45',
-    fontWeight: '800',
-    fontSize: 12,
-    marginTop: 15,
-  },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(12,35,42,.6)' },
-  modalContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    padding: 18,
-    paddingVertical: 40,
-  },
+  page: { paddingHorizontal: 18, paddingBottom: 30, gap: 14 },
+  hero: { paddingVertical: 14, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.6, color: '#4d8069' },
+  heading: { fontSize: 28, fontWeight: '800', color: '#164d3b' },
+  board: { gap: 18, alignItems: 'flex-start' },
+  pendingPanel: { backgroundColor: '#fffdf5', borderWidth: 1, borderColor: '#e7d691', borderRadius: 14 },
+  pendingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f6ce52', padding: 16, borderTopLeftRadius: 13, borderTopRightRadius: 13 },
+  panelTitle: { fontSize: 15, fontWeight: '800', color: '#524015' },
+  count: { backgroundColor: '#584719', color: '#fff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, fontWeight: '800' },
+  workHeader: { backgroundColor: '#203f33', padding: 16, borderRadius: 12, gap: 4 },
+  workTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  workHint: { fontSize: 11, color: '#c5d9cd' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' },
+  route: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cfddd4', borderRadius: 14 },
+  routeHeader: { backgroundColor: '#087947', padding: 10, gap: 6, borderTopLeftRadius: 13, borderTopRightRadius: 13 },
+  routeTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  routeHeaderText: { color: '#fff' },
+  plate: { color: '#3c554a', fontSize: 12, fontWeight: '800', backgroundColor: '#fff', borderRadius: 5, padding: 5 },
+  routeBody: { padding: 10, gap: 8 },
+  task: { backgroundColor: '#fff', borderWidth: 1, borderLeftWidth: 4, borderColor: '#d8e3db', borderLeftColor: '#3f87cc', borderRadius: 9, padding: 10, gap: 6 },
+  taskFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  taskActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  taskAction: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 6, backgroundColor: '#edf5ef' },
+  deleteAction: { backgroundColor: '#fff0ec' },
+  disabledAction: { opacity: 0.45 },
+  moveText: { fontSize: 12, fontWeight: '700', color: '#176346' },
+  deleteText: { fontSize: 12, fontWeight: '700', color: '#a33321' },
+  dragHint: { fontSize: 11, color: '#64766e', flexShrink: 1 },
+  taskTitle: { color: '#244c3a', fontSize: 13, fontWeight: '800', flexShrink: 1 },
+  tag: { fontSize: 10, fontWeight: '800', color: '#775b0c', backgroundColor: '#fff1bf', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
+  assigned: { backgroundColor: '#e2eefc', color: '#245e9c' },
+  warning: { color: '#8c621c', backgroundColor: '#fff4d9', padding: 8, borderRadius: 6, fontSize: 11, lineHeight: 17 },
+  emptyDrop: { padding: 16, alignItems: 'center', gap: 8, backgroundColor: '#f8faf7', borderWidth: 1, borderStyle: 'dashed', borderColor: '#c4d6c9', borderRadius: 9 },
+  emptyIcon: { fontSize: 25, color: '#8aa797' },
 });

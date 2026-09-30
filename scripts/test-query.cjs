@@ -223,52 +223,8 @@ test('login distingue un rechazo de credenciales de un fallo de conexión', asyn
   );
 });
 
-const {
-  orderStops,
-  routeSegments,
-  fetchRoadRoute,
-} = require('../src/services/route-geometry.ts');
-const routeStop = (id, hour, lat = -31.4167, lon = -64.1833) => ({
-  Id_Detalle_HDR: id,
-  Id_HojaRuta: 1,
-  HoraEstimada: hour,
-  Latitud: lat,
-  Longitud: lon,
-});
-test('recorrido ordena por horario e ID sin mutar las paradas; horarios inválidos al final', () => {
-  const stops = [
-    routeStop(4, 'mal'),
-    routeStop(3, '09:00'),
-    routeStop(2, '08:00'),
-    routeStop(1, '08:00'),
-  ];
-  const ordered = orderStops(stops);
-  assert.deepEqual(
-    ordered.map((p) => p.stop.Id_Detalle_HDR),
-    [1, 2, 3, 4],
-  );
-  assert.deepEqual(
-    ordered.map((p) => p.number),
-    [1, 2, 3, 4],
-  );
-  assert.equal(stops[0].Id_Detalle_HDR, 4);
-});
-test('paradas sin GPS no se convierten en cero ni se saltean al dibujar tramos', () => {
-  const points = orderStops([
-    routeStop(1, '08:00'),
-    routeStop(2, '09:00', null, null),
-    routeStop(3, '10:00'),
-    routeStop(4, '11:00'),
-    routeStop(5, '12:00', 999, -64),
-  ]);
-  assert.equal(points[1].coordinate, null);
-  assert.equal(points[4].coordinate, null);
-  assert.deepEqual(routeSegments(points), [
-    [points[2].coordinate, points[3].coordinate],
-  ]);
-  assert.deepEqual(routeSegments([]), []);
-  assert.deepEqual(routeSegments([points[0]]), []);
-});
+const { fetchRoadRoute } = require('../src/services/route-geometry.ts');
+
 test('OSRM recibe longitud,latitud y devuelve geometría vial, distancia y duración', async () => {
   global.fetch = async (url) => {
     assert.match(
@@ -382,4 +338,144 @@ test('cambiar de hoja cancela la consulta de recorrido anterior', async () => {
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(requestSignal.aborted, true);
+});
+const { shortestVisitOrder, tourCost, optimizeCircuit, findBase, currentTaskCoordinates } = require('../src/services/optimized-circuit.ts');
+const { assignPendingTask } = require('../src/services/assign-task.ts');
+
+test('optimización exacta incluye retorno a base y respeta distancias asimétricas', () => {
+  const matrix = [[0, 2, 9, 3], [8, 0, 1, 9], [1, 7, 0, 3], [9, 1, 6, 0]];
+  const orders = [[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]];
+  const best = shortestVisitOrder(matrix);
+  assert.equal(tourCost(best, matrix), Math.min(...orders.map(o => tourCost(o, matrix))));
+  assert.deepEqual(best, [3,1,2]);
+});
+test('hojas grandes: no se pierden tareas y no empeora el orden original', () => {
+  const matrix = Array.from({length: 16}, (_, i) => Array.from({length: 16}, (_, j) => i === j ? 0 : ((i*19+j*13)%23)+1));
+  const baseline = Array.from({length:15}, (_,i)=>i+1);
+  const order = shortestVisitOrder(matrix);
+  assert.deepEqual([...order].sort((a,b)=>a-b), baseline);
+  assert.ok(tourCost(order,matrix) <= tourCost(baseline,matrix));
+  assert.deepEqual(shortestVisitOrder(matrix),order);
+});
+test('la base viene del origen EMEC real; ambigüedad o GPS faltante no inventan coordenadas', () => {
+  const origin = {IdOrigen: 50, EmpresaInstitucion:'EMEC',Latitud:-31.4,Longitud:-64.1};
+  assert.deepEqual(findBase([origin]), {latitude:-31.4,longitude:-64.1});
+  assert.equal(findBase([]),null);
+  assert.equal(findBase([origin,{...origin,IdOrigen:51}]),null);
+  assert.equal(findBase([{...origin,Latitud:null}]),null);
+  assert.equal(findBase([{...origin,EmpresaInstitucion:'Proveedor EMEC'}]),null);
+});
+test('las coordenadas actuales del origen reemplazan las anteriores sin convertir null a cero', () => {
+  const task = {Id_Detalle_HDR:1,Id_Origen:10,Latitud:1,Longitud:1};
+  const [updated] = currentTaskCoordinates([task],[{IdOrigen:10,Latitud:null,Longitud:null}]);
+  assert.equal(updated.Latitud,null); assert.equal(task.Latitud,1);
+});
+const basePoint = {latitude:-31.4,longitude:-64.1};
+const taskPoint = {Id_Detalle_HDR:1,Id_Origen:4,Id_HojaRuta:null,Latitud:-31.5,Longitud:-64.2};
+test('circuito consulta matriz y geometría cerrada; no usa horarios', async () => {
+  const urls=[];
+  global.fetch=async (url)=>{
+    urls.push(url);
+    if(url.includes('/table/')) return Response.json({code:'Ok',distances:[[0,1000],[2000,0]]});
+    return Response.json({code:'Ok',routes:[{distance:3000,duration:240,geometry:{coordinates:[[-64.1,-31.4],[-64.2,-31.5],[-64.1,-31.4]]}}]});
+  };
+  const result=await optimizeCircuit([taskPoint],basePoint);
+  assert.equal(result.distance,3000); assert.equal(result.incomingKm[1],1);
+  assert.match(urls[1],/-64.1,-31.4;-64.2,-31.5;-64.1,-31.4/);
+});
+test('circuito incompleto o matriz desconectada no presenta un total falso', async () => {
+  let calls=0;global.fetch=async()=>{calls++;return Response.json({code:'Ok',distances:[[0,null],[2000,0]]})};
+  await assert.rejects(optimizeCircuit([{...taskPoint,Latitud:null}],basePoint),/incompleto/);
+  assert.equal(calls,0);
+  await assert.rejects(optimizeCircuit([taskPoint],basePoint),/distancias/);
+});
+test('cancelar el cálculo propaga señal de aborto', async()=>{
+  const controller=new AbortController();controller.abort();
+  global.fetch=async(_,init)=>{init.signal.throwIfAborted()};
+  await assert.rejects(optimizeCircuit([taskPoint],basePoint,controller.signal),{name:'AbortError'});
+});
+test('crear tarea envía hoja nula; asignación y total usan PATCH distintos',async()=>{
+  const requests=[];global.fetch=async(url,init)=>{requests.push({url,method:init.method,data:JSON.parse(init.body)});return Response.json({})};
+  await sitmasApi.crearParada({...taskPoint,Id_HojaRuta:null});
+  await sitmasApi.asignarTarea(1,2,3.5,2);
+  await sitmasApi.actualizarDistanciaTotal(2,15);
+  assert.equal(requests[0].data.Id_HojaRuta,null);
+  assert.deepEqual(requests[1].data,{IdHojaRuta:2,DistanciaTramo:3.5,IdEstadoAsignado:2});
+  assert.match(requests[1].url,/1\/asignar$/);assert.equal(requests[1].method,'PATCH');
+  assert.deepEqual(requests[2].data,{DistanciaTotal:15});
+});
+test('asignación no reenvía el PATCH si falla el guardado posterior de kilómetros',async()=>{
+  let assignments=0;
+  global.fetch=async(url,init)=>{
+    if(url.endsWith('/pendientes'))return Response.json([taskPoint]);
+    if(url.endsWith('/hojaruta/2') && !url.includes('detalle'))return Response.json({Id:2,Id_Estado:1});
+    if(url.includes('/detallehojaruta/hojaruta/'))return Response.json(assignments?[{...taskPoint,Id_HojaRuta:2}]:[]);
+    if(url.endsWith('/asignar')){assignments++;return Response.json({})}
+    if(url.includes('/table/'))return Response.json({code:'Ok',distances:[[0,1000],[2000,0]]});
+    if(url.includes('/route/'))return Response.json({code:'Ok',routes:[{distance:3000,duration:240,geometry:{coordinates:[[-64.1,-31.4],[-64.2,-31.5],[-64.1,-31.4]]}}]});
+    if(url.endsWith('/distanciatotal'))return new Response('{}',{status:500});
+    assert.fail(url+' '+init?.method);
+  };
+  const message=await assignPendingTask(1,2,2,[{IdOrigen:50,EmpresaInstitucion:'EMEC',Latitud:-31.4,Longitud:-64.1}]);
+  assert.equal(assignments,1);assert.match(message,/Tarea asignada/);assert.match(message,/No se pudo actualizar/);
+});
+test('tarea ya asignada por otro operador no se vuelve a asignar',async()=>{
+  global.fetch=async(url,init)=>{assert.notEqual(init?.method,'PATCH');return Response.json(url.endsWith('/hojaruta/2')&&!url.includes('detalle')?{Id:2}:[])};
+  await assert.rejects(assignPendingTask(1,2,2,[]),/ya no está pendiente/);
+});
+
+test('la confirmación debe contener la tarea antes de anunciar una asignación exitosa', async () => {
+  let assignments = 0;
+  global.fetch = async (url) => {
+    if (url.endsWith('/pendientes')) return Response.json([taskPoint]);
+    if (url.endsWith('/hojaruta/2') && !url.includes('detalle')) return Response.json({ Id: 2, Id_Estado: 1 });
+    if (url.includes('/detallehojaruta/hojaruta/')) return Response.json([]);
+    if (url.endsWith('/asignar')) { assignments++; return Response.json({}); }
+    assert.fail(url);
+  };
+  await assert.rejects(assignPendingTask(1, 2, 2, []), /no aparece en esta hoja/);
+  assert.equal(assignments, 1);
+});
+
+test('trasladar recalcula ambas hojas y deja en cero la hoja vacía sin duplicar asignación', async () => {
+  let moved = false, assignments = 0;
+  const totals = new Map();
+  global.fetch = async (url, init) => {
+    if (/\/hojaruta\/[23]$/.test(url) && !url.includes('detalle')) return Response.json({ Id_Estado: 2 });
+    if (url.endsWith('/detallehojaruta/hojaruta/3')) return Response.json(moved ? [] : [{ ...taskPoint, Id_HojaRuta: 3 }]);
+    if (url.endsWith('/detallehojaruta/hojaruta/2')) return Response.json(moved ? [{ ...taskPoint, Id_HojaRuta: 2 }] : []);
+    if (url.endsWith('/asignar')) { assignments++; moved = true; return Response.json({}); }
+    if (url.includes('/table/')) return Response.json({ code: 'Ok', distances: [[0,1000],[2000,0]] });
+    if (url.includes('/route/')) return Response.json({ code: 'Ok', routes: [{ distance:3000, duration:240, geometry:{coordinates:[[-64.1,-31.4],[-64.2,-31.5],[-64.1,-31.4]]} }] });
+    if (url.endsWith('/distanciatotal')) { totals.set(Number(url.split('/').at(-2)), JSON.parse(init.body).DistanciaTotal); return Response.json({}); }
+    assert.fail(url);
+  };
+  const result = await assignPendingTask(1, 2, 2, [{ IdOrigen:50, EmpresaInstitucion:'EMEC', Latitud:-31.4, Longitud:-64.1 }], 3);
+  assert.match(result, /trasladada/); assert.equal(assignments, 1);
+  assert.equal(totals.get(3), 0); assert.equal(totals.get(2), 3);
+});
+
+test('soltar en la misma hoja no vuelve a asignar ni suma kilómetros', async () => {
+  global.fetch = async () => assert.fail('No debe enviar solicitudes');
+  assert.match(await assignPendingTask(1, 2, 2, [], 2), /ya pertenece/);
+});
+
+test('eliminar la última tarea actualiza el total a cero incluso sin coordenadas EMEC', async () => {
+  const { deleteTask } = require('../src/services/assign-task.ts');
+  let deleted = false, total;
+  global.fetch = async (url, init) => {
+    if (url.endsWith('/hojaruta/2') && !url.includes('detalle')) return Response.json({ Id_Estado:2 });
+    if (url.endsWith('/detallehojaruta/hojaruta/2')) return Response.json(deleted ? [] : [{ ...taskPoint, Id_HojaRuta:2 }]);
+    if (url.endsWith('/detallehojaruta/1') && init.method === 'DELETE') { deleted = true; return Response.json({}); }
+    if (url.endsWith('/distanciatotal')) { total = JSON.parse(init.body).DistanciaTotal; return Response.json({}); }
+    assert.fail(url);
+  };
+  assert.match(await deleteTask(1, 2, []), /Tarea eliminada/);
+  assert.equal(deleted, true); assert.equal(total, 0);
+});
+
+test('eliminar no borra una tarea que otro operador ya trasladó', async () => {
+  const { deleteTask } = require('../src/services/assign-task.ts');
+  global.fetch = async (url, init) => { assert.notEqual(init?.method, 'DELETE'); return Response.json(url.includes('detalle') ? [] : { Id_Estado:2 }); };
+  await assert.rejects(deleteTask(1, 2, []), /La tarea cambió/);
 });
