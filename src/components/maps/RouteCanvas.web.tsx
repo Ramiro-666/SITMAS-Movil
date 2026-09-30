@@ -74,11 +74,11 @@ export default function RouteCanvas({
           lat: point.coordinate.latitude,
           lng: point.coordinate.longitude,
         },
-        title: `Parada ${point.number}: ${point.stop.Origen || 'Punto en mapa'} · ${point.stop.HoraEstimadaFormateada || point.stop.HoraEstimada || 'Sin horario'}`,
+        title: point.number === 0 ? 'Sede EMEC · salida y regreso' : `Tarea ${point.number}: ${point.stop.Origen || 'Punto en mapa'}`,
         gmpClickable: true,
       });
       const badge = document.createElement('span');
-      badge.textContent = String(point.number);
+      badge.textContent = point.number === 0 ? 'E' : String(point.number);
       badge.style.cssText =
         'display:grid;place-items:center;width:32px;height:32px;border-radius:50%;border:2px solid white;color:white;font:bold 14px sans-serif;box-shadow:0 2px 6px #0004;background:' +
         (point.stop.Id_Detalle_HDR === selectedId ? '#0054a6' : '#007b3e');

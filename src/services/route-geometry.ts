@@ -12,45 +12,6 @@ export type RoadRoute = {
   distance: number;
   duration: number;
 };
-function scheduledTime(stop: Parada) {
-  const match = /^(\d{1,2}):(\d{2})/.exec(
-    stop.HoraEstimadaFormateada || stop.HoraEstimada || '',
-  );
-  if (!match || +match[1] > 23 || +match[2] > 59) return Infinity;
-  return +match[1] * 60 + +match[2];
-}
-export function orderStops(stops: Parada[]): RouteStop[] {
-  return [...stops]
-    .sort((a, b) => {
-      const left = scheduledTime(a),
-        right = scheduledTime(b);
-      return (
-        (left === right ? 0 : left - right) ||
-        a.Id_Detalle_HDR - b.Id_Detalle_HDR
-      );
-    })
-    .map((stop, index) => ({
-      stop,
-      number: index + 1,
-      coordinate: validCoordinates(stop)
-        ? { latitude: stop.Latitud!, longitude: stop.Longitud! }
-        : null,
-    }));
-}
-// Un punto sin GPS interrumpe el recorrido: no inventar un tramo que lo saltee.
-export function routeSegments(points: RouteStop[]): Coordinate[][] {
-  const segments: Coordinate[][] = [];
-  let current: Coordinate[] = [];
-  for (const point of points) {
-    if (point.coordinate) current.push(point.coordinate);
-    else {
-      if (current.length > 1) segments.push(current);
-      current = [];
-    }
-  }
-  if (current.length > 1) segments.push(current);
-  return segments;
-}
 export const routingEndpoint = (
   process.env.EXPO_PUBLIC_OSRM_URL || 'https://router.project-osrm.org'
 ).replace(/\/$/, '');

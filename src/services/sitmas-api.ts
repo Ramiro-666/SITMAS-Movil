@@ -21,7 +21,10 @@ export type HojaRuta = {
   Vehiculo?: string;
   ChoferNombreCompleto?: string;
   Id_Vehiculo?: number;
-  Id_Chofer?: number;
+  Id_Chofer?: number | null;
+  Id_Estado?: number | null;
+  Estado?: string;
+  Distancia_Total_Estimada_Km?: number;
   HojaRutaFecha?: string;
 };
 export type PesoBruto = {
@@ -69,7 +72,7 @@ export type Ubicacion = {
 };
 export type Parada = {
   Id_Detalle_HDR: number;
-  Id_HojaRuta: number;
+  Id_HojaRuta: number | null;
   Id_TipoMovimiento: number;
   Id_RecursoMov: number;
   Id_Origen: number;
@@ -144,6 +147,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const sitmasApi = {
+  tareasPendientes: (signal?: AbortSignal) =>
+    request<Parada[]>('detallehojaruta/pendientes', { signal }),
+  asignarTarea: (id: number, IdHojaRuta: number, DistanciaTramo: number, IdEstadoAsignado: number) =>
+    request<{ Mensaje: string }>(`detallehojaruta/${id}/asignar`, {
+      method: 'PATCH',
+      body: JSON.stringify({ IdHojaRuta, DistanciaTramo, IdEstadoAsignado }),
+    }),
+  actualizarDistanciaTotal: (id: number, DistanciaTotal: number) =>
+    request<{ Mensaje: string }>(`hojaruta/${id}/distanciatotal`, {
+      method: 'PATCH', body: JSON.stringify({ DistanciaTotal }),
+    }),
   ubicaciones: (signal?: AbortSignal) =>
     request<Ubicacion[]>('ubicaciongeografica', { signal }),
   crearUbicacion: (location: Omit<Ubicacion, 'IdUbicacion'>) =>
@@ -204,7 +218,8 @@ export const sitmasApi = {
   crearHojaRuta: (data: {
     HojaRutaFecha: string;
     Id_Vehiculo: number;
-    Id_Chofer: number;
+    Id_Chofer: number | null;
+    Id_Estado?: number;
   }) =>
     request<{ IdGenerado: number }>('hojaruta', {
       method: 'POST',

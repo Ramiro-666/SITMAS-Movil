@@ -64,9 +64,9 @@ export default function RouteCanvas({
               <Marker
                 key={point.stop.Id_Detalle_HDR}
                 coordinate={point.coordinate}
-                title={`Parada ${point.number}: ${point.stop.Origen || 'Punto en mapa'}`}
+                title={`Tarea ${point.number === 0 ? 'E' : point.number}: ${point.stop.Origen || 'Punto en mapa'}`}
                 description={
-                  point.stop.HoraEstimadaFormateada || point.stop.HoraEstimada
+                  point.number === 0 ? 'Salida y regreso' : point.stop.TipoMaterial || 'Tarea asignada'
                 }
                 onPress={() => onSelect(point.stop.Id_Detalle_HDR)}
               >
@@ -76,7 +76,7 @@ export default function RouteCanvas({
                     point.stop.Id_Detalle_HDR === selectedId && styles.selected,
                   ]}
                 >
-                  <Text style={styles.number}>{point.number}</Text>
+                  <Text style={styles.number}>{point.number === 0 ? 'E' : point.number}</Text>
                 </View>
               </Marker>
             ),
