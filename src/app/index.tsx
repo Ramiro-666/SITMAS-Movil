@@ -68,7 +68,9 @@ function Card({
   );
 }
 function Login() {
+  // Zustand: seleccionamos la acción de sesión, sin copiar datos de la API.
   const onLogin = useSessionStore((state) => state.signIn);
+  // TanStack controla carga/error del login; al confirmar se actualiza Zustand.
   const login = useSitmasMutation(
     ({ usuario, password }: { usuario: string; password: string }) =>
       sitmasApi.login(usuario, password),
@@ -374,6 +376,7 @@ function OdometroPanel({
   const odometersQuery = useSitmasQuery(queries.odometros);
   const vehiculos = vehiclesQuery.data ?? [];
   const odometros = odometersQuery.data ?? [];
+  // Guardar invalida odómetros para que la lista vuelva a leer la API.
   const save = useSitmasMutation(sitmasApi.guardarOdometro, [keys.odometros]);
   const [idVehiculo, setIdVehiculo] = useState(0);
   const [inicio, setInicio] = useState('');
@@ -595,6 +598,7 @@ function AppShell() {
   );
 }
 export default function HomeScreen() {
+  // Este selector de Zustand cambia la pantalla al iniciar o cerrar sesión.
   const signedIn = useSessionStore((state) => state.session !== null);
   return signedIn ? <AppShell /> : <Login />;
 }

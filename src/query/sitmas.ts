@@ -9,21 +9,19 @@ import { useRef } from 'react';
 import { sitmasApi } from '../services/sitmas-api';
 import { useSessionStore } from '../state/session-store';
 
+// TanStack: las claves identifican la caché; invalidar hojas también alcanza sus tareas.
 export const keys = {
   vehiculos: ['vehiculos'],
   marcas: ['marcas'],
   modelos: ['modelos'],
   tipos: ['tiposVehiculo'],
   odometros: ['odometros'],
-  choferes: ['choferes'],
   pendientes: ['tareasPendientes'],
   hojas: ['hojasRuta'],
-  hoja: (id: number) => ['hojasRuta', id] as const,
   paradas: (id: number) => ['hojasRuta', id, 'paradas'] as const,
   movimientos: ['tiposMovimiento'],
   recursos: ['recursosMovilizados'],
   origenes: ['origenes'],
-  ubicaciones: ['ubicaciones'],
   materiales: ['materiales'],
   estados: ['estadosHojaRuta'],
   pesos: ['dashboard', 'pesos'],
@@ -38,6 +36,7 @@ function options<T>(
 ) {
   return queryOptions({
     queryKey,
+    // TanStack entrega la señal para cancelar peticiones que ya no se necesitan.
     queryFn: ({ signal }) => fetcher(signal),
     staleTime: catalog ? 5 * 60_000 : 30_000,
   });
@@ -51,10 +50,7 @@ export const queries = {
   modelos: options(keys.modelos, sitmasApi.modelos, true),
   tipos: options(keys.tipos, sitmasApi.tiposVehiculo, true),
   odometros: options(keys.odometros, sitmasApi.odometros),
-  choferes: options(keys.choferes, sitmasApi.choferes),
   hojas: options(keys.hojas, sitmasApi.hojasRuta),
-  hoja: (id: number) =>
-    options(keys.hoja(id), (signal) => sitmasApi.hojaRuta(id, signal)),
   paradas: (id: number) =>
     options(keys.paradas(id), (signal) =>
       sitmasApi.detalleHojaRuta(id, signal),
@@ -62,7 +58,6 @@ export const queries = {
   movimientos: options(keys.movimientos, sitmasApi.tiposMovimiento, true),
   recursos: options(keys.recursos, sitmasApi.recursosMovilizados, true),
   origenes: options(keys.origenes, sitmasApi.origenes, true),
-  ubicaciones: options(keys.ubicaciones, sitmasApi.ubicaciones),
   materiales: options(keys.materiales, sitmasApi.materiales, true),
   estados: options(keys.estados, sitmasApi.estadosHojaRuta, true),
   pesos: options(keys.pesos, sitmasApi.pesoBruto),
@@ -74,6 +69,7 @@ export function useSitmasQuery<T>(
   config: ReturnType<typeof options<T>>,
   enabled = true,
 ) {
+  // Zustand selecciona solo la sesión; sin login, TanStack no consulta la API.
   const signedIn = useSessionStore((state) => state.session !== null);
   return useQuery({ ...config, enabled: signedIn && enabled });
 }
@@ -87,12 +83,14 @@ export function useSitmasMutation<T, V>(
   const inFlight = useRef(false);
   const mutation = useMutation({
     mutationFn,
+    // Tras guardar (o un fallo parcial), releer solo las listas afectadas.
     onSettled: async () => {
       await Promise.all(
         affected.map((queryKey) => client.invalidateQueries({ queryKey })),
       );
     },
   });
+  // El ref bloquea dobles clics antes de que React renderice isPending.
   async function run(variables: V) {
     if (inFlight.current) throw new Error('Ya hay una operación en curso.');
     inFlight.current = true;

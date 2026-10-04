@@ -13,6 +13,7 @@ export function TaskDrag({ taskId, disabled, children }: { taskId: number; disab
   const offset = useRef(new Animated.ValueXY()).current;
   const [active, setActive] = useState(false);
   const latest = useRef({ disabled, taskId, zones }); latest.current = { disabled, taskId, zones };
+  // Los gestos llaman acciones de Zustand con getState, sin usar hooks en callbacks.
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, g) => !latest.current.disabled && Math.hypot(g.dx, g.dy) > 10,

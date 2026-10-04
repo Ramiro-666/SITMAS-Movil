@@ -74,7 +74,7 @@ test('fallo al refrescar conserva datos previos y deja otras consultas intactas'
   assert.deepEqual(queryClient.getQueryData(keys.marcas), [{ Id: 5 }]);
 });
 
-test('invalidar hojas alcanza ambas agendas y no invalida los catálogos', async () => {
+test('invalidar hojas alcanza las tareas de ambas hojas y no invalida los catálogos', async () => {
   queryClient.setQueryData(keys.paradas(1), []);
   queryClient.setQueryData(keys.paradas(2), []);
   queryClient.setQueryData(keys.marcas, []);
@@ -109,101 +109,11 @@ test('salir cancela peticiones y limpia los datos del usuario anterior', async (
   assert.equal(queryClient.getQueryData(keys.marcas), undefined);
 });
 
-test('servicio usa el nuevo origen y conserva distancia/GPS al editar paradas', async () => {
-  const requests = [];
-  global.fetch = async (url, init) => {
-    requests.push({ url, init });
-    return new Response('{}');
-  };
+test('los orígenes se consultan desde la API real de SITMAS', async () => {
+  let requested;
+  global.fetch = async (url) => { requested = url; return Response.json([]); };
   await sitmasApi.origenes();
-  const stop = {
-    Id_Detalle_HDR: 1,
-    Id_HojaRuta: 2,
-    Id_Ubicacion: 8,
-    DistanciaDesdeAnterior_Km: 12.5,
-    HoraEstimada: '09:00:00',
-  };
-  await sitmasApi.actualizarParada(stop);
-  assert.ok(requests[0].url.endsWith('/api/origen'));
-  assert.deepEqual(JSON.parse(requests[1].init.body), stop);
-});
-
-const { saveStopWithLocation } = require('../src/services/save-stop.ts');
-
-test('ubicación guardada se reutiliza sin crear otra y conserva distancia', async () => {
-  const requests = [];
-  global.fetch = async (url, init) => {
-    requests.push({ url, data: JSON.parse(init.body) });
-    return new Response('{}');
-  };
-  await saveStopWithLocation(
-    {
-      Id_Detalle_HDR: 3,
-      Id_HojaRuta: 1,
-      Id_Origen: 7,
-      DistanciaDesdeAnterior_Km: 12,
-    },
-    { IdUbicacion: 8, Descripcion: 'Punto', Latitud: -31.4, Longitud: -64.1 },
-    () => assert.fail('No debe crear ubicación'),
-  );
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].data.Id_Ubicacion, 8);
-  assert.equal(requests[0].data.Id_Origen, 0);
-  assert.equal(requests[0].data.DistanciaDesdeAnterior_Km, 12);
-});
-
-test('fallo parcial conserva ubicación creada y reintento no la duplica', async () => {
-  let location = {
-    Descripcion: 'Nuevo punto',
-    Latitud: -31.4,
-    Longitud: -64.1,
-  };
-  let created = 0;
-  let stopAttempts = 0;
-  global.fetch = async (url) => {
-    if (url.endsWith('/ubicaciongeografica')) {
-      created++;
-      return new Response(JSON.stringify({ IdUbicacionGenerado: 9 }));
-    }
-    stopAttempts++;
-    return new Response('{}', { status: stopAttempts === 1 ? 500 : 200 });
-  };
-  const payload = { Id_HojaRuta: 1, Id_Origen: 0 };
-  await assert.rejects(
-    saveStopWithLocation(payload, location, (saved) => {
-      location = saved;
-    }),
-  );
-  assert.equal(location.IdUbicacion, 9);
-  await saveStopWithLocation(payload, location, () =>
-    assert.fail('No debe duplicar ubicación'),
-  );
-  assert.equal(created, 1);
-  assert.equal(stopAttempts, 2);
-});
-
-test('cambiar de GPS a origen limpia el vínculo geográfico anterior', async () => {
-  let payload;
-  global.fetch = async (_, init) => {
-    payload = JSON.parse(init.body);
-    return new Response('{}');
-  };
-  await saveStopWithLocation(
-    {
-      Id_Detalle_HDR: 2,
-      Id_HojaRuta: 1,
-      Id_Origen: 5,
-      Id_Ubicacion: 8,
-      Latitud: -31.4,
-      Longitud: -64.1,
-    },
-    null,
-    () => {},
-  );
-  assert.equal(payload.Id_Origen, 5);
-  assert.equal(payload.Id_Ubicacion, null);
-  assert.equal(payload.Latitud, null);
-  assert.equal(payload.Longitud, null);
+  assert.ok(requested.endsWith('/api/origen'));
 });
 
 test('login distingue un rechazo de credenciales de un fallo de conexión', async () => {

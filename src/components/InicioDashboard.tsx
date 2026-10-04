@@ -104,6 +104,7 @@ function Empty({ error }: { error?: boolean }) {
 }
 
 export default function InicioDashboard() {
+  // TanStack comparte caché y estados de carga/error para los indicadores reales.
   const pesosQuery = useSitmasQuery(queries.pesos);
   const rendimientoQuery = useSitmasQuery(queries.rendimiento);
   const stockQuery = useSitmasQuery(queries.stock);

@@ -1,14 +1,3 @@
-import type { Ubicacion } from '../../services/sitmas-api';
-
-export type MapPoint = Omit<Ubicacion, 'IdUbicacion'> & {
-  IdUbicacion?: number;
-};
-export type MapCanvasProps = {
-  locations: Ubicacion[];
-  value: MapPoint | null;
-  disabled: boolean;
-  onChange: (point: MapPoint) => void;
-};
 export const CORDOBA = { latitude: -31.4167, longitude: -64.1833 };
 export function validCoordinates(point: {
   Latitud?: number | null;

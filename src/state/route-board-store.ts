@@ -12,6 +12,7 @@ type BoardState = {
 // Solo estado de interacción; las tareas y las hojas pertenecen a TanStack Query.
 export const useRouteBoardStore = create<BoardState>((set) => ({
   mapId: null, assignmentId: null, draggingId: null,
+  // set actualiza solo estos campos y notifica a los componentes suscritos.
   openMap: (mapId) => set({ mapId }),
   selectTask: (assignmentId) => set({ assignmentId }),
   drag: (draggingId) => set({ draggingId }),

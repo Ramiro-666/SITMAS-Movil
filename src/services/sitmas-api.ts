@@ -63,13 +63,6 @@ export type TipoVehiculo = {
   Tp_Vehiculo?: string;
   TipoVehiculo?: string;
 };
-export type Chofer = { Id: number; Nombre?: string; Apellido?: string };
-export type Ubicacion = {
-  IdUbicacion: number;
-  Descripcion: string;
-  Latitud: number;
-  Longitud: number;
-};
 export type Parada = {
   Id_Detalle_HDR: number;
   Id_HojaRuta: number | null;
@@ -158,13 +151,6 @@ export const sitmasApi = {
     request<{ Mensaje: string }>(`hojaruta/${id}/distanciatotal`, {
       method: 'PATCH', body: JSON.stringify({ DistanciaTotal }),
     }),
-  ubicaciones: (signal?: AbortSignal) =>
-    request<Ubicacion[]>('ubicaciongeografica', { signal }),
-  crearUbicacion: (location: Omit<Ubicacion, 'IdUbicacion'>) =>
-    request<{ IdUbicacionGenerado: number }>('ubicaciongeografica', {
-      method: 'POST',
-      body: JSON.stringify({ IdUbicacion: 0, ...location }),
-    }),
   login: (Usuario: string, Password: string) =>
     request<Session>('Usuario/Login', {
       method: 'POST',
@@ -213,8 +199,6 @@ export const sitmasApi = {
     request<HojaRuta[]>('hojaruta', { signal }),
   hojaRuta: (id: number, signal?: AbortSignal) =>
     request<HojaRuta>(`hojaruta/${id}`, { signal }),
-  choferes: (signal?: AbortSignal) =>
-    request<Chofer[]>('Empleado/ListarChoferes', { signal }),
   crearHojaRuta: (data: {
     HojaRutaFecha: string;
     Id_Vehiculo: number;
@@ -225,23 +209,8 @@ export const sitmasApi = {
       method: 'POST',
       body: JSON.stringify({ Id: 0, ...data }),
     }),
-  actualizarHojaRuta: (
-    id: number,
-    data: { HojaRutaFecha: string; Id_Vehiculo: number; Id_Chofer: number },
-  ) =>
-    request<void>(`hojaruta/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ Id: id, ...data }),
-    }),
-  borrarHojaRuta: (id: number) =>
-    request<void>(`hojaruta/${id}`, { method: 'DELETE' }),
   detalleHojaRuta: (id: number, signal?: AbortSignal) =>
     request<Parada[]>(`detallehojaruta/hojaruta/${id}`, { signal }),
-  actualizarParada: (parada: Parada) =>
-    request<Parada>(`detallehojaruta/${parada.Id_Detalle_HDR}`, {
-      method: 'PUT',
-      body: JSON.stringify(parada),
-    }),
   crearParada: (parada: Omit<Parada, 'Id_Detalle_HDR'>) =>
     request<Parada>('detallehojaruta', {
       method: 'POST',
