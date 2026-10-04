@@ -103,4 +103,14 @@ npm test
 npm run export:web
 ```
 
-La suite incluye **29 pruebas automatizadas** sobre consultas y caché, sesión, coordenadas, optimización, asignaciones, traslados y eliminación. Se verificó el flujo inicial del tablero contra la API real con registros temporales que se retiraron al finalizar. Los casos adicionales de traslado y eliminación se validaron con respuestas controladas de API, sin eliminar tareas reales del usuario.
+La suite incluye **26 pruebas automatizadas** sobre consultas y caché, sesión, coordenadas, optimización, asignaciones, traslados y eliminación. Se verificó el flujo inicial del tablero contra la API real con registros temporales que se retiraron al finalizar. Los casos adicionales de traslado y eliminación se validaron con respuestas controladas de API, sin eliminar tareas reales del usuario.
+
+## Guía breve: TanStack Query y Zustand
+
+- `src/query/client.ts`: configura la caché compartida y los reintentos.
+- `src/query/sitmas.ts`: define claves, consultas y mutaciones reutilizables. `useSitmasQuery(queries.vehiculos)` entrega datos, carga y error; `useSitmasMutation` guarda y vuelve a consultar las listas afectadas.
+- `src/state/session-store.ts`: Zustand guarda la sesión en memoria y limpia la caché al salir.
+- `src/state/route-board-store.ts`: Zustand comparte la selección del mapa y el arrastre; las tareas reales permanecen en TanStack.
+- `src/components/RoutePlanner.tsx`: ejemplo de ambas herramientas trabajando juntas. Los comentarios explican cada responsabilidad sin duplicar datos.
+
+Para agregar una consulta, definir su método en `sitmas-api.ts`, su clave y opciones en `query/sitmas.ts`, y consumirla con `useSitmasQuery`. Para una escritura, indicar en `useSitmasMutation` las claves que deben refrescarse. Usar Zustand para estado compartido de la interfaz, no para copiar respuestas de la API.

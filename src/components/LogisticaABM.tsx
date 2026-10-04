@@ -160,6 +160,7 @@ export function CatalogABM({
   const items: (Marca | Modelo)[] =
     kind === 'modelo' ? (modelsQuery.data ?? []) : brands;
   const listQuery = kind === 'modelo' ? modelsQuery : brandsQuery;
+  // TanStack: la mutación guarda en la API y refresca las claves indicadas abajo.
   const operation = useSitmasMutation(
     async (action: () => Promise<unknown>) => action(),
     kind === 'modelo'
@@ -349,6 +350,7 @@ export function TiposVehiculoABM({
 }) {
   const listQuery = useSitmasQuery(queries.tipos);
   const items = listQuery.data ?? [];
+  // TanStack: la mutación guarda en la API y refresca las claves indicadas abajo.
   const operation = useSitmasMutation(
     async (action: () => Promise<unknown>) => action(),
     [keys.tipos, keys.vehiculos],
@@ -490,6 +492,7 @@ export function VehiculosABM({
   const items = listQuery.data ?? [],
     models = modelsQuery.data ?? [],
     types = typesQuery.data ?? [];
+  // TanStack: la mutación guarda en la API y refresca las claves indicadas abajo.
   const operation = useSitmasMutation(
     async (action: () => Promise<unknown>) => action(),
     [keys.vehiculos, keys.hojas],

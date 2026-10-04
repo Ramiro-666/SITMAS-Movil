@@ -11,6 +11,7 @@ type SessionState = {
 // En memoria: no persistimos credenciales. Los datos remotos viven en Query.
 export const useSessionStore = create<SessionState>((set) => ({
   session: null,
+  // Zustand actualiza la sesión; limpiamos Query para no mezclar usuarios.
   signIn: (session) => {
     queryClient.clear();
     set({ session });
@@ -19,6 +20,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     // La interfaz también bloquea salir mientras se confirma una escritura.
     if (queryClient.isMutating()) return;
     set({ session: null });
+    // Cancelar respuestas pendientes antes de vaciar los datos remotos.
     void queryClient.cancelQueries();
     queryClient.clear();
   },

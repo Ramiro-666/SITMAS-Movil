@@ -57,6 +57,7 @@ export default function RoutePlanner({ header, footer }: { header: React.ReactEl
   const client = useQueryClient();
   const { width } = useWindowDimensions();
   const wide = width >= 850;
+  // TanStack mantiene datos remotos y caché; no duplicarlos en useState/Zustand.
   const routesQuery = useSitmasQuery(queries.hojas);
   const pendingQuery = useSitmasQuery(queries.pendientes);
   const originsQuery = useSitmasQuery(queries.origenes);
@@ -68,6 +69,7 @@ export default function RoutePlanner({ header, footer }: { header: React.ReactEl
   const routes = [...(routesQuery.data ?? [])].sort((a, b) => b.Id - a.Id);
   const origins = originsQuery.data ?? [];
   const pending = currentTaskCoordinates(pendingQuery.data ?? [], origins);
+  // Zustand comparte solo selección y arrastre entre tarjetas, mapa y tablero.
   const board = useRouteBoardStore();
   useEffect(() => () => useRouteBoardStore.getState().reset(), []);
   const [form, setForm] = useState<'task' | 'route' | null>(null);
@@ -77,6 +79,7 @@ export default function RoutePlanner({ header, footer }: { header: React.ReactEl
   const [notice, setNotice] = useState('');
   const [deleting, setDeleting] = useState<Parada | null>(null);
   const inFlight = useRef(false);
+  // Al modificar tareas, TanStack relee pendientes y todas las hojas afectadas.
   const mutation = useSitmasMutation(async (action: () => Promise<unknown>) => action(), [keys.pendientes, keys.hojas]);
   const busy = mutation.isPending;
   const stateId = (name: string) => Number(statesQuery.data?.find((s) => String(s.EstadoHojaRuta).toLowerCase() === name.toLowerCase())?.Id || 0);

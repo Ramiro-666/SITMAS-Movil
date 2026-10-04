@@ -31,6 +31,7 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
   useEffect(() => {
     if (Platform.OS === 'web') return;
+    // TanStack refresca consultas vencidas cuando la app vuelve al primer plano.
     focusManager.setFocused(AppState.currentState === 'active');
     const subscription = AppState.addEventListener('change', (state) =>
       focusManager.setFocused(state === 'active'),
@@ -38,6 +39,7 @@ export default function RootLayout() {
     return () => subscription.remove();
   }, []);
   if (!fontsLoaded && !fontError) return null;
+  // El Provider hace accesible la misma caché a todos los hooks de TanStack.
   return (
     <QueryClientProvider client={queryClient}>
       <Stack screenOptions={{ headerShown: false }} />

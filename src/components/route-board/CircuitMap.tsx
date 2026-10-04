@@ -21,6 +21,7 @@ export default function CircuitMap({ routeId, origins, pending, busy, canAssign,
   const [selected, setSelected] = useState<number | null>(null);
   const [fit, setFit] = useState(0);
   const [message, setMessage] = useState('');
+  // TanStack recalcula al cambiar hoja/coordenadas; reutiliza el resultado si coinciden.
   const route = useQuery({
     queryKey: ['optimizedRoute', routeId, routingEndpoint, base, tasks.map((t) => [t.Id_Detalle_HDR, t.Latitud, t.Longitud])],
     queryFn: ({ signal }) => optimizeCircuit(tasks, base!, signal),
@@ -34,6 +35,7 @@ export default function CircuitMap({ routeId, origins, pending, busy, canAssign,
     if (base) list.unshift({ number: 0, coordinate: base, stop: { Id_Detalle_HDR: -1, Id_HojaRuta: routeId, Id_Origen: 0, Id_TipoMovimiento: 0, Id_RecursoMov: 0, Id_TipoMaterial: 0, Id_Estado: 0, Origen: 'Sede EMEC · salida y regreso' } });
     return list;
   }, [ordered, base, routeId]);
+  // Guardar kilómetros invalida las hojas para actualizar sus tarjetas.
   const save = useSitmasMutation(async () => {
     if (!route.isSuccess || route.isFetching || detail.isFetching || detail.isError) throw new Error('Actualizá el recorrido antes de guardar.');
     // Comprobar que nadie cambió las tareas mientras se calculaba el mapa.

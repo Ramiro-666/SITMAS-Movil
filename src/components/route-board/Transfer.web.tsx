@@ -42,6 +42,7 @@ export function TaskDrag({ taskId, disabled, children }: { taskId: number; disab
     frame.current = requestAnimationFrame(tick);
   };
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // getState permite ejecutar acciones de Zustand desde eventos del puntero.
   const clear = () => { stopScroll(); gesture.current = null; setOffset({ x: 0, y: 0 }); useRouteBoardStore.getState().drag(null); };
   useEffect(() => {
     const cancel = () => clear();
@@ -77,6 +78,7 @@ export function TaskDrag({ taskId, disabled, children }: { taskId: number; disab
 }
 export function DropTarget({ routeId, disabled, onDrop, children }: { routeId: number; disabled: boolean; onDrop: (id: number) => void; children: ReactNode }) {
   const zones = useContext(Zones);
+  // El selector suscribe cada destino solo al ID arrastrado para destacar su borde.
   const dragging = useRouteBoardStore((s) => s.draggingId);
   return <div ref={(element) => { if (element) zones?.set(routeId, { element, disabled, onDrop }); else zones?.delete(routeId); }} aria-label={`Asignar tareas a hoja ${routeId}`} style={{ borderRadius: 14, outline: dragging !== null && !disabled ? '2px dashed #13855b' : 'none' }}>{children}</div>;
 }
