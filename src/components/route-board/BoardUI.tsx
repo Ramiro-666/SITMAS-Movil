@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text } from '../AppText';
+import { SafeAreaView } from 'react-native-safe-area-context';
 export function Action({ title, onPress, disabled = false, secondary = false }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={[ui.button, secondary && ui.secondary, disabled && { opacity: 0.45 }]}><Text style={[ui.buttonText, secondary && { color: '#176346' }]}>{title}</Text></Pressable>;
 }
 export function BoardModal({ title, onClose, busy, children }: { title: string; onClose: () => void; busy: boolean; children: ReactNode }) {
-  return <Modal visible transparent animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
+  return <Modal visible transparent statusBarTranslucent navigationBarTranslucent animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
+    <SafeAreaView style={{ flex: 1 }}>
     <KeyboardAvoidingView style={ui.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={ui.modal} accessibilityViewIsModal>
         <View style={ui.row}><Text accessibilityRole="header" style={ui.title}>{title}</Text><Action title="Cerrar" onPress={onClose} disabled={busy} secondary /></View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16, gap: 12 }}>{children}</ScrollView>
       </View>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   </Modal>;
 }
 export const ui = StyleSheet.create({

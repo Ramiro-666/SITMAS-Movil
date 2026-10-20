@@ -29,7 +29,7 @@ export async function fetchRoadRoute(
     for (const segment of segments) {
       // Lotes con el extremo compartido; mantiene el orden en hojas largas.
       for (let start = 0; start < segment.length - 1; start += 24) {
-        controller.signal.throwIfAborted();
+        if (controller.signal.aborted) throw Object.assign(new Error('Cálculo cancelado.'), { name: 'AbortError' });
         const points = segment.slice(start, start + 25);
         const coordinates = points
           .map((p) => `${p.longitude},${p.latitude}`)
@@ -69,7 +69,7 @@ export async function fetchRoadRoute(
         result.duration += route.duration;
       }
     }
-    controller.signal.throwIfAborted();
+    if (controller.signal.aborted) throw Object.assign(new Error('Cálculo cancelado.'), { name: 'AbortError' });
     return result;
   } finally {
     clearTimeout(timeout);

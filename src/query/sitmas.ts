@@ -18,6 +18,8 @@ export const keys = {
   odometros: ['odometros'],
   pendientes: ['tareasPendientes'],
   hojas: ['hojasRuta'],
+  hoy: ['hojasRuta', 'hoy'],
+  hoja: (id: number) => ['hojasRuta', id] as const,
   paradas: (id: number) => ['hojasRuta', id, 'paradas'] as const,
   movimientos: ['tiposMovimiento'],
   recursos: ['recursosMovilizados'],
@@ -27,6 +29,7 @@ export const keys = {
   pesos: ['dashboard', 'pesos'],
   rendimiento: ['dashboard', 'rendimiento'],
   stock: ['dashboard', 'stock'],
+  recuperados: ['dashboard', 'recuperadosSemana'],
 } as const;
 
 function options<T>(
@@ -50,7 +53,11 @@ export const queries = {
   modelos: options(keys.modelos, sitmasApi.modelos, true),
   tipos: options(keys.tipos, sitmasApi.tiposVehiculo, true),
   odometros: options(keys.odometros, sitmasApi.odometros),
+  odometrosVehiculo: (id: number) => options(['odometros', id], (signal) => sitmasApi.odometrosVehiculo(id, signal)),
   hojas: options(keys.hojas, sitmasApi.hojasRuta),
+  hoy: options(keys.hoy, sitmasApi.rutasHoy),
+  hoja: (id: number) =>
+    options(keys.hoja(id), (signal) => sitmasApi.hojaRuta(id, signal)),
   paradas: (id: number) =>
     options(keys.paradas(id), (signal) =>
       sitmasApi.detalleHojaRuta(id, signal),
@@ -63,6 +70,7 @@ export const queries = {
   pesos: options(keys.pesos, sitmasApi.pesoBruto),
   rendimiento: options(keys.rendimiento, sitmasApi.rendimiento),
   stock: options(keys.stock, sitmasApi.stockNeto),
+  recuperados: options(keys.recuperados, sitmasApi.materialesRecuperados),
 };
 
 export function useSitmasQuery<T>(

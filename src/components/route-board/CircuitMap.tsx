@@ -1,18 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Text } from '../AppText';
 import { Action, ui } from './BoardUI';
 import RouteCanvas from '../maps/RouteCanvas';
-import SelectField from '../SelectField';
 import { validCoordinates } from '../maps/types';
 import { queries, useSitmasQuery, useSitmasMutation, keys } from '../../query/sitmas';
-import { currentTaskCoordinates, findBase, optimizeCircuit } from '../../services/optimized-circuit';
-import { routingEndpoint, type RouteStop } from '../../services/route-geometry';
-import { sitmasApi, type CatalogItem, type Parada } from '../../services/sitmas-api';
+import { currentTaskCoordinates, findBase, optimizeCircuit, type Circuit } from '../../services/optimized-circuit';
+import { routingEndpoint, type Coordinate, type RouteStop } from '../../services/route-geometry';
+import { sitmasApi, type CatalogItem } from '../../services/sitmas-api';
 
-export default function CircuitMap({ routeId, origins, pending, busy, canAssign, onAssign }: {
-  routeId: number; origins: CatalogItem[]; pending: Parada[]; busy: boolean; canAssign: boolean; onAssign: (taskId: number, routeId: number) => void;
+export default function CircuitMap({ routeId, origins, busy, compact = false, onMapPress, canSave = false, onCalculated }: {
+  routeId: number; origins: CatalogItem[]; busy: boolean; compact?: boolean; onMapPress?: (point: Coordinate) => void; canSave?: boolean; onCalculated?: (circuit: Circuit | null) => void;
 }) {
   const client = useQueryClient();
   const detail = useSitmasQuery(queries.paradas(routeId));
@@ -28,6 +27,7 @@ export default function CircuitMap({ routeId, origins, pending, busy, canAssign,
     enabled: detail.isSuccess && !!base,
     staleTime: 60000, retry: false,
   });
+  useEffect(() => { onCalculated?.(route.isSuccess && !route.isFetching && !detail.isFetching && !detail.isError ? route.data : null); }, [route.isSuccess, route.isFetching, route.data, detail.isFetching, detail.isError, onCalculated]);
   const ordered = useMemo(() => route.isSuccess ? route.data.tasks.map((t) => tasks.find((fresh) => fresh.Id_Detalle_HDR === t.Id_Detalle_HDR)!).filter(Boolean) : tasks, [route.data, route.isSuccess, tasks]);
   const points = useMemo(() => {
     const list: RouteStop[] = ordered.map((stop, index) => ({ stop, number: index + 1, coordinate: validCoordinates(stop) ? { latitude: stop.Latitud!, longitude: stop.Longitud! } : null }));
@@ -45,28 +45,27 @@ export default function CircuitMap({ routeId, origins, pending, busy, canAssign,
   }, [keys.hojas]);
   const chosen = points.find((p) => p.stop.Id_Detalle_HDR === selected);
   return <View style={{ gap: 12 }}>
-    <Text style={ui.muted}>EMEC → tareas → EMEC · El orden se recalcula al cambiar las tareas. Los kilómetros son estimados.</Text>
-    {canAssign && <SelectField label="Asignar tarea pendiente a esta hoja" value={0} disabled={busy || save.isPending || !pending.length} options={pending.map((t) => ({ id: t.Id_Detalle_HDR, text: `#${t.Id_Detalle_HDR} · ${t.Origen || 'Tarea'} · ${t.TipoMaterial || 'General'}` }))} onChange={(id) => onAssign(id, routeId)} />}
+    <Text style={ui.muted}>{compact ? 'EMEC → paradas → EMEC · Recorrido optimizado' : 'EMEC → tareas → EMEC · El orden se recalcula al cambiar las tareas. Los kilómetros son estimados.'}</Text>
     {detail.isError && <Text accessibilityRole="alert" style={ui.error}>No se pudieron actualizar las tareas.</Text>}
     {!base && <Text accessibilityRole="alert" style={ui.error}>No se encontró una única sede EMEC con coordenadas válidas en los orígenes de SITMAS.</Text>}
     {route.isFetching && <View style={ui.row}><ActivityIndicator color="#087947" /><Text style={ui.muted}>Buscando un recorrido más corto…</Text></View>}
     {route.isError && <Text accessibilityRole="alert" style={ui.error}>{route.error instanceof Error ? route.error.message : 'No se pudo calcular el circuito.'}</Text>}
-    <RouteCanvas points={points} paths={route.isSuccess ? route.data.paths : []} selectedId={selected} fitVersion={fit} onSelect={setSelected} />
+    <RouteCanvas points={points} paths={route.isSuccess ? route.data.paths : []} selectedId={selected} fitVersion={fit} onSelect={setSelected} onMapPress={onMapPress} />
     <View style={ui.row}><Action title="Ver circuito completo" secondary onPress={() => setFit((v) => v + 1)} /><Action title="Actualizar recorrido" secondary disabled={route.isFetching || detail.isFetching || busy || save.isPending} onPress={() => { void (async () => { await client.invalidateQueries({ queryKey: keys.origenes }); await detail.refetch(); await client.invalidateQueries({ queryKey: ['optimizedRoute', routeId] }); })(); }} /></View>
     {chosen && <Text style={ui.notice}>{chosen.number ? `Tarea ${chosen.number} · ` : ''}{chosen.stop.Origen}</Text>}
     {route.data && !route.isError && <>
       <Text style={ui.title}>{(route.data.distance / 1000).toFixed(2)} km · {Math.round(route.data.duration / 60)} min de conducción</Text>
-      <Text style={ui.muted}>{route.data.method === 'exact' ? 'Mejor orden según las distancias viales consultadas.' : 'Orden mejorado para reducir kilómetros.'} No incluye tiempos de carga, descarga ni tráfico en vivo.</Text>
-      {canAssign && <Action title={save.isPending ? 'Guardando kilómetros…' : 'Guardar km calculados'} disabled={busy || save.isPending || route.isFetching || detail.isFetching || detail.isError} onPress={() => { setMessage(''); void save.run(undefined).then(() => setMessage('Total del circuito guardado en SITMAS.')).catch((e: unknown) => setMessage(e instanceof Error ? e.message : 'No se pudo guardar el total.')); }} />}
+      <Text style={ui.muted}>{compact ? 'Estimación sin tráfico ni tiempos de carga.' : 'Orden calculado por distancias viales. No incluye tráfico en vivo ni tiempos de carga.'}</Text>
+      {canSave && <Action title={save.isPending ? 'Guardando kilómetros…' : 'Guardar km calculados'} disabled={busy || save.isPending || route.isFetching || detail.isFetching || detail.isError} onPress={() => { setMessage(''); void save.run(undefined).then(() => setMessage('Total del circuito guardado en SITMAS.')).catch((e: unknown) => setMessage(e instanceof Error ? e.message : 'No se pudo guardar el total.')); }} />}
     </>}
     {!!message && <Text accessibilityRole="alert" style={ui.notice}>{message}</Text>}
-    <Text style={ui.title}>Orden de visita{route.isSuccess ? '' : ' · pendiente de cálculo'}</Text>
-    <Text style={ui.text}>Salida · Sede EMEC</Text>
+    <Text style={ui.title}>{compact ? 'Paradas' : 'Orden de visita'}{route.isSuccess ? '' : ' · pendiente de cálculo'}</Text>
+    {!compact && <Text style={ui.text}>Salida · Sede EMEC</Text>}
     {ordered.map((task, index) => <View key={task.Id_Detalle_HDR} style={{ padding: 12, borderRadius: 8, backgroundColor: '#f3f6f3', gap: 4 }}>
       <Text style={ui.text}>{route.isSuccess ? `${index + 1}. ` : ''}{task.Origen || `Tarea #${task.Id_Detalle_HDR}`}</Text>
       <Text style={ui.muted}>#{task.Id_Detalle_HDR} · {task.TipoMovimiento || 'Movimiento'} · {task.TipoMaterial || 'General'}{!validCoordinates(task) ? ' · Sin coordenadas' : ''}</Text>
     </View>)}
     {!tasks.length && !detail.isPending && <Text style={ui.muted}>Esta hoja todavía no tiene tareas.</Text>}
-    <Text style={ui.text}>Regreso · Sede EMEC</Text>
+    {!compact && <Text style={ui.text}>Regreso · Sede EMEC</Text>}
   </View>;
 }

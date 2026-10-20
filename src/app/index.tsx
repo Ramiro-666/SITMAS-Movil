@@ -6,19 +6,21 @@ import {
   FlatList,
   Image,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import InicioDashboard from '../components/InicioDashboard';
+import ChoferDashboard from '../components/ChoferDashboard';
+import { isDriverRole } from '../services/driver-routes';
 import {
   CatalogABM,
   TiposVehiculoABM,
   VehiculosABM,
 } from '../components/LogisticaABM';
 import RoutePlanner from '../components/RoutePlanner';
-import { ApiError, sitmasApi } from '../services/sitmas-api';
+import { ApiError, InvalidSessionError, sitmasApi } from '../services/sitmas-api';
 import { useIsMutating } from '@tanstack/react-query';
 import { useSessionStore } from '../state/session-store';
 import {
@@ -154,7 +156,9 @@ function Login() {
       setPassword('');
       onLogin(session);
     } catch (error) {
-      if (error instanceof ApiError) {
+      if (error instanceof InvalidSessionError) {
+        setError(error.message);
+      } else if (error instanceof ApiError) {
         setError(
           error.status === 401
             ? 'Usuario o contraseña incorrectos.'
@@ -178,7 +182,7 @@ function Login() {
     outputRange: [1, 1.26],
   });
   return (
-    <SafeAreaView style={styles.loginSafe}>
+    <View style={styles.loginSafe}>
       <Animated.View
         style={[
           styles.loginBackground,
@@ -217,6 +221,8 @@ function Login() {
             placeholderTextColor="#6d8390"
             style={styles.loginInput}
             autoCapitalize="none"
+            autoCorrect={false}
+            editable={!loading}
             keyboardType="email-address"
           />
           <TextInput
@@ -226,6 +232,7 @@ function Login() {
             placeholderTextColor="#6d8390"
             style={styles.loginInput}
             secureTextEntry
+            editable={!loading}
           />
           {!!error && <Text style={styles.loginError}>{error}</Text>}
           <Pressable
@@ -242,7 +249,7 @@ function Login() {
         </Animated.View>
         <Logo name="loginFooter" style={styles.loginFooter} />
       </Animated.View>
-    </SafeAreaView>
+    </View>
   );
 }
 function Tile({
@@ -303,16 +310,16 @@ function Logistica({ footer }: { footer: React.ReactElement }) {
       </View>
       <View style={styles.tiles}>
         <Tile
-          symbol="truck"
-          label="Vehículos"
-          color="blue"
-          onPress={() => !writing && setTool('vehiculos')}
-        />
-        <Tile
           symbol="route"
           label="Hojas de ruta"
-          color="green"
+          color="blue"
           onPress={() => !writing && setTool('hojas')}
+        />
+        <Tile
+          symbol="truck"
+          label="Vehículos"
+          color="green"
+          onPress={() => !writing && setTool('vehiculos')}
         />
         <Tile
           symbol="◉"
@@ -529,14 +536,15 @@ function AppShell() {
     </>
   );
   if (!session) return null;
+  const driver = isDriverRole(session.rol);
   return (
-    <SafeAreaView style={styles.app}>
+    <View style={styles.app}>
       <View style={styles.top}>
         <Logo name="header" style={styles.headerLogo} />
         <View style={styles.headerActions}>
-          <View>
-            <Text style={styles.userName}>{session.nombre || 'Usuario'}</Text>
-            <Text style={styles.userRole}>{session.rol || 'Sin rol'}</Text>
+          <View style={styles.userInfo}>
+            <Text numberOfLines={1} style={styles.userName}>{session.nombre || 'Usuario'}</Text>
+            <Text numberOfLines={1} style={styles.userRole}>{session.rol || 'Sin rol'}</Text>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -552,7 +560,7 @@ function AppShell() {
       <View style={styles.dropdown} pointerEvents={openMenu ? 'auto' : 'none'}>
         <Collapsible open={openMenu}>
           <View style={styles.menuSurface}>
-            {(['inicio', 'logistica', 'configuracion'] as Section[]).map(
+            {((driver ? ['inicio'] : ['inicio', 'logistica', 'configuracion']) as Section[]).map(
               (item) => (
                 <Pressable
                   key={item}
@@ -586,24 +594,27 @@ function AppShell() {
       <View style={styles.bar}>
         <Text style={styles.barText}>{section.toUpperCase()}</Text>
       </View>
-      {section === 'logistica' ? (
+      {!driver && section === 'logistica' ? (
         <Logistica footer={footer} />
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
-          {section === 'inicio' ? <InicioDashboard /> : <Configuracion />}
+          {driver ? <ChoferDashboard /> : section === 'inicio' ? <InicioDashboard /> : <Configuracion />}
           {footer}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 export default function HomeScreen() {
+  const { width } = useWindowDimensions();
   // Este selector de Zustand cambia la pantalla al iniciar o cerrar sesión.
   const signedIn = useSessionStore((state) => state.session !== null);
-  return signedIn ? <AppShell /> : <Login />;
+  return <View style={{ flex: 1, width: width || '100%', maxWidth: '100%', minWidth: 0 }}>
+    {signedIn ? <AppShell /> : <Login />}
+  </View>;
 }
 const styles = StyleSheet.create({
-  loginSafe: { flex: 1, backgroundColor: '#0054a6' },
+  loginSafe: { flex: 1, width: '100%', minWidth: 0, backgroundColor: '#0054a6' },
   loginBackground: {
     flex: 1,
     justifyContent: 'center',
@@ -618,8 +629,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bioLogo: { width: '100%', height: 125 },
-  loginForm: { marginTop: 210, gap: 16 },
+  loginForm: { marginTop: 210, gap: 16, width: '100%', minWidth: 0, alignSelf: 'center' },
   loginInput: {
+    width: '100%',
+    minWidth: 0,
     height: 54,
     borderRadius: 28,
     backgroundColor: '#fff',
@@ -629,6 +642,8 @@ const styles = StyleSheet.create({
   },
   loginError: { color: '#fff', fontSize: 12 },
   enterButton: {
+    width: '100%',
+    minWidth: 0,
     height: 54,
     borderRadius: 28,
     backgroundColor: '#fff',
@@ -652,8 +667,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerLogo: { width: 135, height: 50 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerLogo: { width: 115, height: 50, flexShrink: 0 },
+  headerActions: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+  userInfo: { flex: 1, minWidth: 0 },
   userName: {
     color: '#0054a6',
     fontSize: 12,
@@ -661,7 +677,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   userRole: { color: '#637f8d', fontSize: 10, textAlign: 'right' },
-  menuButton: { backgroundColor: '#0093c4', borderRadius: 7, padding: 10 },
+  menuButton: { backgroundColor: '#0093c4', borderRadius: 7, padding: 10, flexShrink: 0 },
   menuText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   dropdown: {
     position: 'absolute',
@@ -682,7 +698,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   barText: { color: '#0054a6', fontSize: 12, fontWeight: '800' },
-  content: { padding: 16, paddingBottom: 34 },
+  content: { padding: 16, paddingBottom: 34, width: '100%', minWidth: 0 },
   intro: { marginBottom: 16 },
   sectionLogo: { alignSelf: 'flex-end', width: 105, height: 44 },
   title: { color: '#007a33', fontSize: 25, fontWeight: '800' },
