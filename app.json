@@ -1,22 +1,21 @@
 {
   "expo": {
     "name": "my-app",
-    "slug": "my-app",
+    "slug": "sitmas-movil",
+    "owner": "sitmas",
+    "extra": {
+      "eas": {
+        "projectId": "50098396-91e8-4c67-bece-18cb6926187e"
+      }
+    },
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/sitmas/biocba-avatar-expo.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
+      "package": "com.sitmas.movil",
+      "versionCode": 3,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -25,6 +24,17 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SITMAS necesita tu ubicación para mostrar tu posición y acompañar el viaje.",
+          "locationAlwaysAndWhenInUsePermission": "SITMAS mantiene la ubicación durante un viaje, incluso con la pantalla bloqueada.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      "./plugins/with-location-notification-icon.cjs",
       [
         "expo-splash-screen",
         {

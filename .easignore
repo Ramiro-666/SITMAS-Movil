@@ -1,0 +1,59 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+.npm-cache/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+!assets/certificates/sitmas-lan-ca.pem
+
+# local env files
+.env*.local
+.local/
+
+# typescript
+*.tsbuildinfo
+
+example
+
+# generated native folders
+/ios
+/android
+
+# Plan de adaptación local
+/PLAN_TANSTACK_ZUSTAND.md
+
+# Documentación de trabajo local
+/docs/
+
+# Configuración de esta PC, innecesaria para compilar
+.claude/
+.vscode/
+.git/
+# La ruta de caché de Windows no sirve para los ejecutables npm en Linux.
+/.npmrc
