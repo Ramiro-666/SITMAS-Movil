@@ -3,6 +3,7 @@
 # dependencies
 node_modules/
 .npm-cache/
+/.npmrc
 
 # Expo
 .expo/
@@ -30,9 +31,11 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+!assets/certificates/sitmas-lan-ca.pem
 
 # local env files
 .env*.local
+.local/
 
 # typescript
 *.tsbuildinfo
