@@ -78,7 +78,7 @@ npm run web
 | Generación e instalación de una APK de prueba en Android | Completado · versionCode 3 |
 | Permiso GPS, posición actual y servicio de ubicación durante viajes | Implementado en Android |
 | Áreas seguras para barras del sistema e ícono GPS Bio | Implementado y probado en el piloto |
-| Prueba de la APK con servidor y base de datos en la nube | Próxima feature · pendiente de la publicación por el compañero |
+| Prueba de la APK con servidor y base de datos en la nube | Próxima feature · pendiente de la publicación oficial del servidor |
 
 ### Próxima feature: prueba con el servidor en la nube
 
