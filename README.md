@@ -78,6 +78,13 @@ npm run web
 | Generación e instalación de una APK de prueba en Android | Completado · versionCode 3 |
 | Permiso GPS, posición actual y servicio de ubicación durante viajes | Implementado en Android |
 | Áreas seguras para barras del sistema e ícono GPS Bio | Implementado y probado en el piloto |
+| Prueba de la APK con servidor y base de datos en la nube | Próxima feature · pendiente de la publicación por el compañero |
+
+### Próxima feature: prueba con el servidor en la nube
+
+Cuando el compañero publique el servidor de SITMAS y la base de datos, se preparará una APK de prueba con la URL HTTPS de la API en la nube. Se verificará desde el celular el inicio de sesión, la consulta y aceptación de rutas, las paradas espontáneas, los mapas y el cierre de viajes, comprobando que los cambios se guarden en la base de datos alojada en la nube.
+
+Esta prueba queda **pendiente hasta disponer del servidor, la base de datos y la URL pública de la API**. Permitirá comprobar el funcionamiento fuera de la red Wi-Fi de esta PC y sin depender del puente HTTPS local. La app seguirá accediendo a los datos mediante la API; no se conectará directamente a SQL Server. El piloto LAN actual continúa disponible mientras se prepara ese entorno.
 
 ## Hoja de ruta: actualización del 30/09/2026
 
