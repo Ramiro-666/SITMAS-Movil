@@ -11,6 +11,7 @@ export default function RouteCanvas({
   selectedId,
   fitVersion,
   onSelect,
+  onMapPress,
 }: RouteCanvasProps) {
   const map = useRef<MapView>(null);
   const [ready, setReady] = useState(false);
@@ -43,7 +44,10 @@ export default function RouteCanvas({
       <MapView
         ref={map}
         style={StyleSheet.absoluteFill}
+        showsUserLocation
+        showsMyLocationButton
         onMapReady={() => setReady(true)}
+        onPress={(event) => { if (event.nativeEvent.action !== 'marker-press') onMapPress?.(event.nativeEvent.coordinate); }}
         initialRegion={{
           ...CORDOBA,
           latitudeDelta: 0.09,
@@ -62,7 +66,7 @@ export default function RouteCanvas({
           (point) =>
             point.coordinate && (
               <Marker
-                key={point.stop.Id_Detalle_HDR}
+                key={`${point.stop.Id_Detalle_HDR}:${point.number}`}
                 coordinate={point.coordinate}
                 title={`Tarea ${point.number === 0 ? 'E' : point.number}: ${point.stop.Origen || 'Punto en mapa'}`}
                 description={

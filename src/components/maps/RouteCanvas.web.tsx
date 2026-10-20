@@ -12,18 +12,22 @@ export default function RouteCanvas({
   selectedId,
   fitVersion,
   onSelect,
+  onMapPress,
 }: RouteCanvasProps) {
   const container = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [error, setError] = useState('');
   const [markersAvailable, setMarkersAvailable] = useState(false);
   const select = useRef(onSelect);
+  const pick = useRef(onMapPress);
+  useEffect(() => { pick.current = onMapPress; }, [onMapPress]);
   useEffect(() => {
     select.current = onSelect;
   }, [onSelect]);
   useEffect(() => {
     let disposed = false;
     let capability: google.maps.MapsEventListener | undefined;
+    let click: google.maps.MapsEventListener | undefined;
     const authError = () =>
       setError(
         'Google Maps no está disponible. Revisá la clave y los permisos para localhost.',
@@ -41,6 +45,7 @@ export default function RouteCanvas({
           fullscreenControl: false,
           gestureHandling: 'cooperative',
         });
+        click = instance.addListener('click', (event: google.maps.MapMouseEvent) => { if (event.latLng) pick.current?.({ latitude: event.latLng.lat(), longitude: event.latLng.lng() }); });
         const update = () => {
           if (!disposed)
             setMarkersAvailable(
@@ -60,6 +65,7 @@ export default function RouteCanvas({
     return () => {
       disposed = true;
       capability?.remove();
+      click?.remove();
       window.removeEventListener('sitmas-map-error', authError);
     };
   }, []);
@@ -170,7 +176,9 @@ export default function RouteCanvas({
 }
 const styles = StyleSheet.create({
   frame: {
-    height: 340,
+    height: 300,
+    width: '100%',
+    minWidth: 0,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#e6eee9',

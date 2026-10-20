@@ -3,12 +3,14 @@ import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  Image,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
 import { queries, useSitmasQuery } from '../query/sitmas';
+import { useQueryClient } from '@tanstack/react-query';
+import RecoveredMaterials from './RecoveredMaterials';
+import { previousDayTasks } from '../services/pending-alert';
 
 const palette = [
   '#16a6c9',
@@ -104,208 +106,36 @@ function Empty({ error }: { error?: boolean }) {
 }
 
 export default function InicioDashboard() {
-  // TanStack comparte caché y estados de carga/error para los indicadores reales.
-  const pesosQuery = useSitmasQuery(queries.pesos);
-  const rendimientoQuery = useSitmasQuery(queries.rendimiento);
+  const client = useQueryClient();
+  const pendingQuery = useSitmasQuery(queries.pendientes);
+  const yesterdayTasks = previousDayTasks(pendingQuery.data ?? []);
   const stockQuery = useSitmasQuery(queries.stock);
-  const pesos = pesosQuery.data ?? [];
-  const rendimiento = rendimientoQuery.data ?? [];
   const stock = stockQuery.data ?? [];
-  const errors = {
-    pesos: pesosQuery.isError && !pesosQuery.data,
-    rendimiento: rendimientoQuery.isError && !rendimientoQuery.data,
-    stock: stockQuery.isError && !stockQuery.data,
-  };
-  const loading =
-    pesosQuery.isFetching ||
-    rendimientoQuery.isFetching ||
-    stockQuery.isFetching;
-  const failed =
-    pesosQuery.isError || rendimientoQuery.isError || stockQuery.isError;
-  const paused = [pesosQuery, rendimientoQuery, stockQuery].some(
-    (q) => q.fetchStatus === 'paused',
-  );
+  const errors = { stock: stockQuery.isError && !stockQuery.data };
+  const totalStock = stock.reduce((sum, row) => sum + safe(row.StockDisponibleKg), 0);
+  const stockOrdenado = [...stock].sort((a, b) => safe(b.StockDisponibleKg) - safe(a.StockDisponibleKg));
+  const stockMax = Math.max(0, ...stockOrdenado.map((row) => safe(row.StockDisponibleKg)));
   const progress = useRef(new Animated.Value(0)).current;
-  const entrance = useRef(new Animated.Value(0)).current;
-  function refresh() {
-    return Promise.all([
-      pesosQuery.refetch(),
-      rendimientoQuery.refetch(),
-      stockQuery.refetch(),
-    ]);
-  }
-  useEffect(() => {
-    const animation = Animated.timing(entrance, {
-      toValue: 1,
-      duration: 550,
-      useNativeDriver: false,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [entrance]);
   useEffect(() => {
     progress.setValue(0);
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration: 850,
-      useNativeDriver: false,
-    });
+    const animation = Animated.timing(progress, { toValue: 1, duration: 850, useNativeDriver: false });
     animation.start();
     return () => animation.stop();
-  }, [
-    progress,
-    pesosQuery.dataUpdatedAt,
-    rendimientoQuery.dataUpdatedAt,
-    stockQuery.dataUpdatedAt,
-  ]);
-
-  const totalBruto = pesos.reduce(
-    (sum, row) => sum + safe(row.TotalPesoBrutoKg),
-    0,
-  );
-  const totalPesadas = pesos.reduce(
-    (sum, row) => sum + safe(row.CantidadPesadas),
-    0,
-  );
-  const totalStock = stock.reduce(
-    (sum, row) => sum + safe(row.StockDisponibleKg),
-    0,
-  );
-  const brutoClasificado = rendimiento.reduce(
-    (sum, row) => sum + safe(row.TotalPesoBrutoKg),
-    0,
-  );
-  const utilClasificado = rendimiento.reduce(
-    (sum, row) => sum + safe(row.TotalPesoUtilKg),
-    0,
-  );
-  const eficiencia =
-    brutoClasificado > 0
-      ? Math.min(100, Math.max(0, (utilClasificado / brutoClasificado) * 100))
-      : 0;
-  const stockOrdenado = [...stock].sort(
-    (a, b) => safe(b.StockDisponibleKg) - safe(a.StockDisponibleKg),
-  );
-  const rendimientoOrdenado = [...rendimiento].sort(
-    (a, b) => safe(b.TotalPesoBrutoKg) - safe(a.TotalPesoBrutoKg),
-  );
-  const pesoOrdenado = [...pesos].sort(
-    (a, b) => safe(b.TotalPesoBrutoKg) - safe(a.TotalPesoBrutoKg),
-  );
-  const pesoMax = Math.max(
-    0,
-    ...pesoOrdenado.map((row) => safe(row.TotalPesoBrutoKg)),
-  );
-  const stockMax = Math.max(
-    0,
-    ...stockOrdenado.map((row) => safe(row.StockDisponibleKg)),
-  );
-  const rendimientoMax = Math.max(
-    0,
-    ...rendimientoOrdenado.map((row) => safe(row.TotalPesoBrutoKg)),
-  );
-
-  return (
-    <Animated.View
-      style={{
-        opacity: entrance,
-        transform: [
-          {
-            translateY: entrance.interpolate({
-              inputRange: [0, 1],
-              outputRange: [14, 0],
-            }),
-          },
-        ],
-      }}
-    >
-      <View style={styles.hero}>
-        <View style={styles.heroOrb} />
-        <View style={styles.heroOrbSmall} />
-        <View style={styles.heroTop}>
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>DATOS DE SITMAS</Text>
-          </View>
-          <Image
-            source={require('@/assets/images/sitmas/ambiente_sinfondo.png')}
-            resizeMode="contain"
-            style={styles.logo}
-          />
-        </View>
-        <Text style={styles.heroTitle}>Tu planta, en una mirada.</Text>
-        <Text style={styles.heroSubtitle}>
-          Ingresos, inventario y clasificación en tiempo real.
-        </Text>
-        <Pressable
-          onPress={() => void refresh()}
-          disabled={loading}
-          accessibilityRole="button"
-          accessibilityLabel="Actualizar tablero"
-          style={styles.refreshButton}
-        >
-          <Text style={styles.refreshText}>
-            {loading ? 'ACTUALIZANDO…' : '↻  ACTUALIZAR DATOS'}
-          </Text>
-        </Pressable>
-      </View>
-
-      {(failed || paused) && (
-        <Text
-          accessibilityRole="alert"
-          style={{ color: '#b23030', marginBottom: 8 }}
-        >
-          No se pudo actualizar todo el tablero. Se conservan los datos
-          disponibles; podés reintentar con Actualizar datos.
-        </Text>
-      )}
-      {loading && (
-        <View style={styles.loading}>
-          <ActivityIndicator color="#078a9c" />
-          <Text style={styles.loadingText}>Consultando el tablero…</Text>
-        </View>
-      )}
-      <View style={styles.kpis}>
-        <View style={[styles.kpi, styles.kpiBlue]}>
-          <Text style={styles.kpiIcon}>↗</Text>
-          <Text style={styles.kpiValue}>
-            {errors.pesos ? '—' : kg(totalBruto)}
-          </Text>
-          <Text style={styles.kpiUnit}>KG INGRESADOS</Text>
-          <Text style={styles.kpiDetail}>Peso bruto acumulado</Text>
-        </View>
-        <View style={[styles.kpi, styles.kpiGreen]}>
-          <Text style={styles.kpiIcon}>◫</Text>
-          <Text style={styles.kpiValue}>
-            {errors.stock ? '—' : kg(totalStock)}
-          </Text>
-          <Text style={styles.kpiUnit}>KG DISPONIBLES</Text>
-          <Text style={styles.kpiDetail}>Stock neto en planta</Text>
-        </View>
-      </View>
-      <View style={styles.miniKpis}>
-        <View style={styles.miniKpi}>
-          <Text style={styles.miniValue}>
-            {errors.pesos ? '—' : kg(totalPesadas)}
-          </Text>
-          <Text style={styles.miniLabel}>Pesadas</Text>
-        </View>
-        <View style={styles.miniDivider} />
-        <View style={styles.miniKpi}>
-          <Text style={styles.miniValue}>
-            {errors.pesos ? '—' : pesos.length}
-          </Text>
-          <Text style={styles.miniLabel}>Materiales</Text>
-        </View>
-        <View style={styles.miniDivider} />
-        <View style={styles.miniKpi}>
-          <Text style={styles.miniValue}>
-            {errors.rendimiento ? '—' : `${eficiencia.toFixed(0)}%`}
-          </Text>
-          <Text style={styles.miniLabel}>Recuperación</Text>
-        </View>
-      </View>
-
+  }, [progress, stockQuery.dataUpdatedAt]);
+  return <View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+      {yesterdayTasks.length > 0 && <View accessibilityRole="alert" style={{ flex: 1, backgroundColor: '#fff3d6', borderColor: '#edc776', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+        <Text style={{ color: '#76500c', fontSize: 12, fontWeight: '800' }}>⚠ {yesterdayTasks.length === 1 ? '1 tarea de ayer sin asignar' : `${yesterdayTasks.length} tareas de ayer sin asignar`}</Text>
+      </View>}
+      {pendingQuery.isError && <Text accessibilityRole="alert" style={{ flex: 1, color: '#a32c2c', fontSize: 11 }}>No se pudieron actualizar las tareas pendientes.</Text>}
+    <Pressable onPress={() => { void Promise.all([stockQuery.refetch(), pendingQuery.refetch(), client.invalidateQueries({ queryKey: queries.recuperados.queryKey })]); }} disabled={stockQuery.isFetching || pendingQuery.isFetching}
+      accessibilityRole="button" accessibilityLabel="Actualizar gráficos" style={{ alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 6 }}>
+      {stockQuery.isFetching ? <ActivityIndicator color="#078a9c" /> : <Text style={{ color: '#007b9c', fontWeight: '700' }}>↻ Actualizar</Text>}
+    </Pressable>
+    </View>
+    {(stockQuery.isError || stockQuery.fetchStatus === 'paused') && stockQuery.data &&
+      <Text accessibilityRole="alert" style={{ color: '#b23030', marginBottom: 8 }}>No se pudo actualizar el stock. Se muestran los últimos datos disponibles.</Text>}
+      <RecoveredMaterials />
       <Panel
         eyebrow="INVENTARIO"
         title="Stock disponible"
@@ -334,179 +164,7 @@ export default function InicioDashboard() {
         )}
       </Panel>
 
-      <Panel
-        eyebrow="INGRESOS"
-        title="Volumen por material"
-        subtitle="Distribución del peso bruto acumulado."
-      >
-        {pesoOrdenado.length ? (
-          <>
-            <View style={styles.stackedTrack}>
-              {pesoOrdenado.map((row, index) => (
-                <Animated.View
-                  key={`${row.SubtipoMaterial}-${index}`}
-                  style={[
-                    styles.stackedSegment,
-                    {
-                      backgroundColor: palette[index % palette.length],
-                      width: progress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [
-                          '0%',
-                          `${totalBruto > 0 ? Math.max(0, (safe(row.TotalPesoBrutoKg) / totalBruto) * 100) : 0}%`,
-                        ],
-                      }),
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-            {pesoOrdenado.map((row, index) => (
-              <View
-                key={`${row.SubtipoMaterial}-${index}`}
-                style={styles.legendRow}
-              >
-                <View
-                  style={[
-                    styles.legendDot,
-                    { backgroundColor: palette[index % palette.length] },
-                  ]}
-                />
-                <Text style={styles.legendName} numberOfLines={1}>
-                  {row.SubtipoMaterial}
-                </Text>
-                <Text style={styles.legendValue}>
-                  {totalBruto > 0
-                    ? ((safe(row.TotalPesoBrutoKg) / totalBruto) * 100).toFixed(
-                        0,
-                      )
-                    : 0}
-                  %
-                </Text>
-              </View>
-            ))}
-            <View style={styles.chartDivider} />
-            {pesoOrdenado.map((row, index) => (
-              <Bar
-                key={`peso-${row.SubtipoMaterial}-${index}`}
-                label={row.SubtipoMaterial}
-                value={safe(row.TotalPesoBrutoKg)}
-                maximum={pesoMax}
-                color={palette[index % palette.length]}
-                progress={progress}
-              />
-            ))}
-          </>
-        ) : pesosQuery.isPending ? (
-          <Text>Cargando ingresos…</Text>
-        ) : (
-          <Empty error={errors.pesos} />
-        )}
-      </Panel>
-
-      <Panel
-        eyebrow="PROCESAMIENTO"
-        title="Eficiencia de clasificación"
-        subtitle="Comparación entre el ingreso bruto y el material útil recuperado."
-      >
-        {rendimientoOrdenado.length ? (
-          <>
-            <View style={styles.efficiencyBox}>
-              <Text style={styles.efficiencyValue}>
-                {eficiencia.toFixed(1)}%
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.efficiencyTitle}>Recuperación global</Text>
-                <Text style={styles.efficiencyDetail}>
-                  {kg(utilClasificado)} kg útiles de {kg(brutoClasificado)} kg
-                  brutos
-                </Text>
-              </View>
-            </View>
-            <View style={styles.efficiencyTrack}>
-              <Animated.View
-                style={[
-                  styles.efficiencyFill,
-                  {
-                    width: progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', `${eficiencia}%`],
-                    }),
-                  },
-                ]}
-              />
-            </View>
-            <View style={styles.key}>
-              <View
-                style={[styles.legendDot, { backgroundColor: '#3174dc' }]}
-              />
-              <Text style={styles.keyText}>Bruto</Text>
-              <View
-                style={[styles.legendDot, { backgroundColor: '#28b7a2' }]}
-              />
-              <Text style={styles.keyText}>Útil</Text>
-            </View>
-            {rendimientoOrdenado.map((row, index) => (
-              <View
-                key={`${row.SubtipoMaterial}-${index}`}
-                style={styles.compare}
-              >
-                <Text style={styles.compareName}>{row.SubtipoMaterial}</Text>
-                <View style={styles.compareLine}>
-                  <View style={styles.compareTrack}>
-                    <Animated.View
-                      style={[
-                        styles.compareFill,
-                        {
-                          backgroundColor: '#3174dc',
-                          width: progress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [
-                              '0%',
-                              `${rendimientoMax > 0 ? (safe(row.TotalPesoBrutoKg) / rendimientoMax) * 100 : 0}%`,
-                            ],
-                          }),
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.compareValue}>
-                    {kg(safe(row.TotalPesoBrutoKg))}
-                  </Text>
-                </View>
-                <View style={styles.compareLine}>
-                  <View style={styles.compareTrack}>
-                    <Animated.View
-                      style={[
-                        styles.compareFill,
-                        {
-                          backgroundColor: '#28b7a2',
-                          width: progress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [
-                              '0%',
-                              `${rendimientoMax > 0 ? (safe(row.TotalPesoUtilKg) / rendimientoMax) * 100 : 0}%`,
-                            ],
-                          }),
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.compareValue}>
-                    {kg(safe(row.TotalPesoUtilKg))}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </>
-        ) : rendimientoQuery.isPending ? (
-          <Text>Cargando rendimiento…</Text>
-        ) : (
-          <Empty error={errors.rendimiento} />
-        )}
-      </Panel>
-    </Animated.View>
-  );
+  </View>;
 }
 
 const styles = StyleSheet.create({

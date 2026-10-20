@@ -5,4 +5,5 @@ export type RouteCanvasProps = {
   selectedId: number | null;
   fitVersion: number;
   onSelect: (id: number) => void;
+  onMapPress?: (point: Coordinate) => void;
 };

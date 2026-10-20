@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AccessibilityInfo,
   FlatList,
@@ -73,10 +74,13 @@ export default function SelectField({
       </Pressable>
       <Modal
         transparent
+        statusBarTranslucent
+        navigationBarTranslucent
         visible={open}
         animationType={reduceMotion ? 'none' : 'fade'}
         onRequestClose={close}
       >
+        <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.backdrop}>
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -130,6 +134,7 @@ export default function SelectField({
             />
           </View>
         </View>
+        </SafeAreaView>
       </Modal>
     </View>
   );
