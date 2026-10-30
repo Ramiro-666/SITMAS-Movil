@@ -25,6 +25,15 @@
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "SITMAS necesita acceder a la cámara para fotografiar el odómetro al comenzar la ruta.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "SITMAS necesita tu ubicación para mostrar tu posición y acompañar el viaje.",

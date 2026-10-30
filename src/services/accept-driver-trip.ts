@@ -4,8 +4,9 @@ import { getTripRecord, saveTripRecord } from '../state/trip-records';
 
 export class TripWriteError extends Error {}
 
-export async function acceptDriverTrip(route: HojaRuta, session: Session, start: number) {
+export async function acceptDriverTrip(route: HojaRuta, session: Session, start: number, startPhotoUri: string) {
   if (!Number.isFinite(start) || start < 0) throw new Error('Ingresá un odómetro inicial válido.');
+  if (typeof startPhotoUri !== 'string' || !startPhotoUri.trim()) throw new Error('Tomá una foto del odómetro antes de comenzar.');
   if (getTripRecord(session.idUsuario, route.Id)) throw new Error('Ya hay un inicio registrado para esta ruta. Revisá el viaje antes de reintentar.');
   const fresh = await sitmasApi.hojaRuta(route.Id);
   if (fresh.Id_Estado !== 2 || !fresh.Id_Vehiculo) throw new Error('La ruta ya no está disponible. Actualizá los datos.');
@@ -15,7 +16,7 @@ export async function acceptDriverTrip(route: HojaRuta, session: Session, start:
   try {
     const odometer = await sitmasApi.iniciarOdometro(fresh.Id_Vehiculo, route.Id, start);
     if (!Number.isInteger(odometer.IdRegistroOdomet) || odometer.IdRegistroOdomet <= 0) throw new Error('Sin confirmación de odómetro.');
-    saveTripRecord({ userId: session.idUsuario, routeId: route.Id, vehicleId: fresh.Id_Vehiculo, odometerId: odometer.IdRegistroOdomet, start, phase: 'open' });
+    saveTripRecord({ userId: session.idUsuario, routeId: route.Id, vehicleId: fresh.Id_Vehiculo, odometerId: odometer.IdRegistroOdomet, start, startPhotoUri, phase: 'open' });
     await sitmasApi.aceptarRuta(route.Id, session.idUsuario);
     return odometer.IdRegistroOdomet;
   } catch {

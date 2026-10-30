@@ -4,6 +4,14 @@ Aplicación de Expo y React Native conectada a la API de SITMAS y su base SQL Se
 
 ## Estado actual · 30/10/2026
 
+### Foto inicial del odómetro · rama de pruebas
+
+Los viajes nuevos requieren ingresar los kilómetros y tomar una foto del odómetro antes de confirmar. La interfaz usa los botones de SITMAS Móvil y `expo-camera`, siguiendo el ejemplo PostalesViaje: solicita permiso de cámara, espera su inicialización, permite capturar, revisar y repetir la foto. Si el permiso está bloqueado, ofrece abrir los ajustes. No solicita micrófono ni acceso a la galería.
+
+Solo se conserva la URI temporal en el registro local del viaje, separada por usuario y ruta. La foto no se envía a SITMAS ni a SQL; el sistema puede limpiar su archivo de caché, y la referencia se retira al finalizar el viaje. Los viajes anteriores sin foto pueden finalizar normalmente. No se verifica automáticamente que los dígitos de la foto coincidan con los kilómetros ingresados.
+
+Requiere una nueva APK para incluir el módulo y el permiso nativo; la APK versionCode 4 enlazada abajo no incluye esta función. Falta validar la cámara en un celular.
+
 ### APK actual · 28/10/2026
 
 La **APK 1.0.0, versionCode 4** se compiló correctamente en Expo e incluye la compatibilidad con la API actual y el acceso móvil exclusivo de Juan y Mauro. Conserva la firma para instalar como actualización. La instalación y validación de esta versión en un celular siguen pendientes de confirmación.

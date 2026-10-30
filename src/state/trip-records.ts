@@ -2,6 +2,8 @@ export type TripRecord = {
   userId: number; routeId: number; vehicleId: number; odometerId: number; start: number;
   phase: 'open' | 'saving-return' | 'closing-odometer' | 'odometer-closed';
   returnId?: number; final?: number; distanceKm?: number;
+  // shortcut: URI de caché temporal; migrar a almacenamiento del servidor cuando esté disponible.
+  startPhotoUri?: string;
 };
 type Storage = { getItem: (key: string) => string | null; setItem: (key: string, value: string) => void; removeItem: (key: string) => void };
 const memory = new Map<string, string>();

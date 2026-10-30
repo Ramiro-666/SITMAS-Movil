@@ -694,26 +694,130 @@ test('login rechaza respuestas exitosas que no contienen una sesión válida', a
   assert.deepEqual(await sitmasApi.login('prueba', 'prueba'), valid);
 });
 
+test('inicio sin foto del odómetro no consulta ni escribe en SITMAS', async () => {
+  const { acceptDriverTrip } = require('../src/services/accept-driver-trip.ts');
+  global.fetch = async () => assert.fail('Sin foto no debe consultar la API');
+  for (const uri of [undefined, '', '   ']) {
+    await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11 }, 1000, uri), /foto del odómetro/);
+  }
+});
+
+test('foto de odómetro pide permiso, espera la cámara, permite reintentar y usa una URI temporal', async () => {
+  const React = require('react');
+  const source = fs.readFileSync(require.resolve('../src/components/OdometerPhoto.tsx'), 'utf8');
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const states = [], refs = [];
+  let stateIndex = 0, refIndex = 0, requested = 0, settings = 0, busy = false, uri = '', failCapture = true;
+  let permission = { granted: false, canAskAgain: true };
+  const module = { exports: {} };
+  const stubs = {
+    react: { ...React, useState: initial => { const i = stateIndex++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = value; }]; }, useRef: initial => refs[refIndex++] ?? (refs[refIndex - 1] = { current: initial }) },
+    'react-native': { View: 'View', Image: 'Image', Platform: { OS: 'android' }, Linking: { openSettings: async () => { settings++; } } },
+    'expo-camera': { CameraView: 'CameraView', useCameraPermissions: () => [permission, async () => { requested++; return permission; }] },
+    './AppText': { Text: 'Text' }, './route-board/BoardUI': { Action: 'Action', ui: {} },
+  };
+  new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? require(name), module, module.exports);
+  function render() { stateIndex = 0; refIndex = 0; return module.exports.default({ uri, disabled: false, onChange: value => { uri = value; }, onBusyChange: value => { busy = value; } }); }
+  function find(element, predicate) {
+    if (!React.isValidElement(element)) return undefined;
+    return predicate(element) ? element : React.Children.toArray(element.props.children).map(child => find(child, predicate)).find(Boolean);
+  }
+  const button = (tree, title) => find(tree, element => element.type === 'Action' && element.props.title === title);
+  const click = async element => { element.props.onPress(); await new Promise(resolve => setImmediate(resolve)); };
+  let tree = render();
+  assert.equal(find(tree, element => element.type === 'CameraView'), undefined);
+  await click(button(tree, 'Fotografiar odómetro'));
+  assert.equal(requested, 1);
+  assert.equal(busy, false);
+  tree = render();
+  assert.ok(find(tree, element => element.props.accessibilityRole === 'alert'));
+  permission = { granted: false, canAskAgain: false };
+  await click(button(render(), 'Abrir ajustes de cámara'));
+  assert.equal(settings, 1);
+  permission = { granted: true, canAskAgain: true };
+  await click(button(render(), 'Fotografiar odómetro'));
+  assert.equal(busy, true);
+  tree = render();
+  assert.equal(button(tree, 'Preparando cámara…').props.disabled, true);
+  refs[0].current = { takePictureAsync: async options => { assert.equal(options.quality, 0.65); if (failCapture) throw new Error('camera'); return { uri: 'file:///cache/odometer.jpg' }; } };
+  find(tree, element => element.type === 'CameraView').props.onCameraReady();
+  await click(button(render(), 'Tomar foto'));
+  assert.equal(uri, '');
+  assert.equal(busy, true);
+  failCapture = false;
+  await click(button(render(), 'Tomar foto'));
+  assert.equal(uri, 'file:///cache/odometer.jpg');
+  assert.equal(busy, false);
+  tree = render();
+  assert.equal(find(tree, element => element.type === 'CameraView'), undefined);
+  assert.equal(find(tree, element => element.type === 'Image').props.source.uri, uri);
+  await click(button(tree, 'Volver a tomar foto'));
+  await click(button(render(), 'Cancelar foto'));
+  assert.equal(uri, 'file:///cache/odometer.jpg');
+  assert.equal(busy, false);
+});
+
+test('formulario del chofer exige kilómetros y foto y bloquea confirmar durante la captura', async () => {
+  const React = require('react');
+  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/components/ChoferDashboard.tsx'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const states = ['hoy', null, { Id: 82, Id_Vehiculo: 2 }, '1000', '', false, '', false];
+  let index = 0, writes = 0;
+  const module = { exports: {} };
+  const stubs = {
+    react: { ...React, useState: () => { const i = index++; return [states[i], value => { states[i] = value; }]; } },
+    'react-native': { View: 'View', Pressable: 'Pressable', StyleSheet: { create: value => value } },
+    './AppText': { Text: 'Text', TextInput: 'Input' }, './OdometerPhoto': { default: 'OdometerPhoto', __esModule: true },
+    './route-board/BoardUI': { Action: 'Action', BoardModal: 'BoardModal', ui: {} },
+    '../query/sitmas': { keys: {}, queries: { odometrosVehiculo: () => [] }, useSitmasQuery: () => ({ isSuccess: true, data: [] }), useSitmasMutation: () => ({ isPending: false, run: async () => { writes++; } }) },
+    '../state/session-store': { useSessionStore: selector => selector({ session: { idUsuario: 11 } }) },
+    '../services/driver-routes': { ownRoutes: () => [], routeDate: () => '2026-10-30' },
+    '@tanstack/react-query': { useIsMutating: () => 0 },
+  };
+  new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? (name.startsWith('.') ? {} : require(name)), module, module.exports);
+  function find(element, predicate) {
+    if (!React.isValidElement(element)) return undefined;
+    return predicate(element) ? element : React.Children.toArray(element.props.children).map(child => find(child, predicate)).find(Boolean);
+  }
+  function render() { index = 0; return module.exports.default(); }
+  const confirm = tree => find(tree, e => e.type === 'Action' && e.props.title === 'Confirmar y comenzar');
+  let tree = render();
+  assert.equal(confirm(tree).props.disabled, true);
+  confirm(tree).props.onPress();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(writes, 0);
+  states[4] = 'file:///cache/odometer.jpg';
+  assert.equal(confirm(render()).props.disabled, false);
+  states[3] = '';
+  assert.equal(confirm(render()).props.disabled, true);
+  states[3] = '1000'; states[5] = true;
+  tree = render();
+  assert.equal(confirm(tree).props.disabled, true);
+  assert.equal(find(tree, e => e.type === 'BoardModal').props.busy, true);
+});
+
 test('aceptación confirma ruta disponible antes de guardar odómetro y asignar', async () => {
   const { acceptDriverTrip } = require('../src/services/accept-driver-trip.ts');
   const calls = [];
   global.fetch = async (url, init) => {
-    calls.push([String(url).split('/api/')[1], init.method]);
+    calls.push([String(url).split('/api/')[1], init.method, init.body]);
     if (String(url).endsWith('/hojaruta/82')) return Response.json({ Id: 82, Id_Estado: 2, Id_Vehiculo: 2 });
     if (String(url).endsWith('/hojaruta')) return Response.json([]);
     if (String(url).endsWith('/iniciar-ruta')) return Response.json({ IdRegistroOdomet: 123 });
     return Response.json({ Mensaje: 'Iniciado' });
   };
-  assert.equal(await acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, 1000), 123);
+  assert.equal(await acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, 1000, 'file:///cache/odometer.jpg'), 123);
   assert.deepEqual(calls.map(c => c[1]), [undefined, undefined, 'POST', 'PATCH']);
+  const { getTripRecord } = require('../src/state/trip-records.ts');
+  assert.equal(getTripRecord(11, 82).startPhotoUri, 'file:///cache/odometer.jpg');
+  assert.ok(calls.every(c => !String(c[2]).includes('odometer.jpg')), 'La foto no se envía a SITMAS');
 });
 
 test('ruta tomada o valores inválidos no escriben; fallo parcial exige revisión', async () => {
   const { acceptDriverTrip, TripWriteError } = require('../src/services/accept-driver-trip.ts');
   global.fetch = async () => assert.fail('No debe consultar por valor inválido');
-  await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, NaN), /válido/);
+  await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, NaN, 'file:///cache/odometer.jpg'), /válido/);
   global.fetch = async (url, init) => { assert.equal(init.method, undefined); return Response.json({ Id_Estado: 3 }); };
-  await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, 1000), /disponible/);
+  await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, 1000, 'file:///cache/odometer.jpg'), /disponible/);
   let writes = 0;
   global.fetch = async (url, init) => {
     if (String(url).endsWith('/hojaruta/82')) return Response.json({ Id_Estado: 2, Id_Vehiculo: 2 });
@@ -722,7 +826,7 @@ test('ruta tomada o valores inválidos no escriben; fallo parcial exige revisió
     if (init.method === 'POST') return Response.json({ IdRegistroOdomet: 123 });
     return new Response('{}', { status: 500 });
   };
-  await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, 1000), TripWriteError);
+  await assert.rejects(acceptDriverTrip({ Id: 82 }, { idUsuario: 11, nombre: 'Mauro Gerosa' }, 1000, 'file:///cache/odometer.jpg'), TripWriteError);
   assert.equal(writes, 2);
 });
 
@@ -802,8 +906,8 @@ test('inicio conserva ID y odómetro para cerrar después de volver a abrir la a
     return Response.json({ IdRegistroOdomet: 31 });
   };
   const { acceptDriverTrip } = require('../src/services/accept-driver-trip.ts');
-  await acceptDriverTrip({ Id: 84 }, tripSession, 1000);
-  assert.deepEqual(getTripRecord(11, 84), tripRecord);
+  await acceptDriverTrip({ Id: 84 }, tripSession, 1000, 'file:///cache/odometer.jpg');
+  assert.deepEqual(getTripRecord(11, 84), { ...tripRecord, startPhotoUri: 'file:///cache/odometer.jpg' });
   assert.equal(getTripRecord(2, 84), null);
 });
 
@@ -859,6 +963,9 @@ test('registro persistente se recupera al reiniciar y rechaza estados incompleto
   saveTripRecord({ ...tripRecord });
   resetTripMemory(); configureTripStorage(adapter);
   assert.deepEqual(getTripRecord(11, 84), tripRecord);
+  saveTripRecord({ ...tripRecord, startPhotoUri: 'file:///cache/odometer.jpg' });
+  resetTripMemory(); configureTripStorage(adapter);
+  assert.equal(getTripRecord(11, 84).startPhotoUri, 'file:///cache/odometer.jpg');
   saveTripRecord({ ...tripRecord, phase: 'odometer-closed' });
   assert.throws(() => getTripRecord(11, 84), /no es válido/);
 });

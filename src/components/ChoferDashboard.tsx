@@ -13,6 +13,7 @@ import DriverTripMap from './DriverTripMap';
 import { useIsMutating } from '@tanstack/react-query';
 import { validCoordinates } from './maps/types';
 import { currentTaskCoordinates } from '../services/optimized-circuit';
+import OdometerPhoto from './OdometerPhoto';
 
 function RouteDetail({ route, onBack, backLabel = '‹ VOLVER A MIS RUTAS' }: { route: HojaRuta; onBack: () => void; backLabel?: string }) {
   const origins = useSitmasQuery(queries.origenes);
@@ -44,12 +45,14 @@ export default function ChoferDashboard() {
   const session = useSessionStore((state) => state.session)!;
   const [accepting, setAccepting] = useState<HojaRuta | null>(null);
   const [kilometers, setKilometers] = useState('');
+  const [photoUri, setPhotoUri] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
   const odometers = useSitmasQuery(queries.odometrosVehiculo(accepting?.Id_Vehiculo ?? 0), !!accepting);
-  const accept = useSitmasMutation((start: number) => acceptDriverTrip(accepting!, session, start), [keys.hojas, keys.odometros]);
+  const accept = useSitmasMutation((start: number) => acceptDriverTrip(accepting!, session, start, photoUri), [keys.hojas, keys.odometros]);
   async function confirm() {
-    if (!kilometers.trim() || blocked || accept.isPending) return;
+    if (!kilometers.trim() || !photoUri || photoBusy || blocked || accept.isPending) return;
     setError('');
     try { await accept.run(Number(kilometers.replace(',', '.'))); setAccepting(null); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo aceptar la ruta.'); if (reason instanceof TripWriteError) setBlocked(true); }
@@ -87,20 +90,21 @@ export default function ChoferDashboard() {
           </Pressable>
         ))}
       </View>
-      {accepting && <BoardModal title={`Aceptar ruta #${accepting.Id}`} busy={accept.isPending} onClose={() => { if (!accept.isPending) setAccepting(null); }}>
+      {accepting && <BoardModal title={`Aceptar ruta #${accepting.Id}`} busy={accept.isPending || photoBusy} onClose={() => { if (!accept.isPending && !photoBusy) setAccepting(null); }}>
         <Text style={styles.subtitle}>{accepting.Vehiculo} · {routeDate(accepting)}</Text>
         <Text style={styles.subtitle}>Al confirmar, se te asignará este viaje y se abrirán su mapa y sus paradas.</Text>
         {odometers.isSuccess && !!odometers.data.length && <Text style={styles.subtitle}>Último odómetro: {odometers.data[0].FinalOdom} km</Text>}
         {odometers.isError && <Text style={styles.subtitle}>No se pudo consultar el odómetro anterior. Verificá el tablero del vehículo.</Text>}
         <Text style={styles.heading}>Odómetro inicial (km)</Text>
         <TextInput accessibilityLabel="Odómetro inicial" placeholder="Valor del tablero" keyboardType="decimal-pad" value={kilometers} onChangeText={setKilometers} editable={!accept.isPending && !blocked} style={ui.input} />
+        <OdometerPhoto uri={photoUri} onChange={setPhotoUri} disabled={accept.isPending || blocked} onBusyChange={setPhotoBusy} />
         {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
-        <Action title={accept.isPending ? 'Confirmando…' : 'Confirmar y comenzar'} onPress={() => { void confirm(); }} disabled={!kilometers.trim() || accept.isPending || blocked} />
+        <Action title={accept.isPending ? 'Confirmando…' : 'Confirmar y comenzar'} onPress={() => { void confirm(); }} disabled={!kilometers.trim() || !photoUri || photoBusy || accept.isPending || blocked} />
       </BoardModal>}
       {tab === 'hoy' ? <>
         <Text style={styles.heading}>Disponibles hoy ({available.length})</Text>
         {available.map((route) => <AvailableTrip key={route.Id} route={route} busy={accept.isPending || blocked}
-          onAccept={() => { setAccepting(route); setKilometers(''); setError(''); }} />)}
+          onAccept={() => { setAccepting(route); setKilometers(''); setPhotoUri(''); setPhotoBusy(false); setError(''); }} />)}
         {today.isSuccess && !available.length && <Text style={styles.subtitle}>No hay rutas disponibles hoy.</Text>}
       </> : <>
         <Text style={styles.heading}>Finalizadas ({history.length})</Text>
