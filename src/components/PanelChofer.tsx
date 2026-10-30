@@ -9,11 +9,11 @@ import { useSessionStore } from '../state/session-store';
 import { ownRoutes, routeDate } from '../services/driver-routes';
 import type { HojaRuta } from '../services/sitmas-api';
 import QueryStatus from './QueryStatus';
-import DriverTripMap from './DriverTripMap';
+import MapaViajeChofer from './MapaViajeChofer';
 import { useIsMutating } from '@tanstack/react-query';
 import { validCoordinates } from './maps/types';
 import { currentTaskCoordinates } from '../services/optimized-circuit';
-import OdometerPhoto from './OdometerPhoto';
+import FotoOdometro from './FotoOdometro';
 
 function RouteDetail({ route, onBack, backLabel = '‹ VOLVER A MIS RUTAS' }: { route: HojaRuta; onBack: () => void; backLabel?: string }) {
   const origins = useSitmasQuery(queries.origenes);
@@ -23,7 +23,7 @@ function RouteDetail({ route, onBack, backLabel = '‹ VOLVER A MIS RUTAS' }: { 
     <Text style={styles.title}>Ruta #{route.Id}</Text>
     <Text style={styles.subtitle}>{routeDate(route)} · {route.Vehiculo} · {route.Estado}</Text>
     <QueryStatus queries={[origins]} />
-    {origins.isSuccess && <DriverTripMap route={route} origins={origins.data} />}
+    {origins.isSuccess && <MapaViajeChofer route={route} origins={origins.data} />}
   </View>;
 }
 function AvailableTrip({ route, busy, onAccept }: { route: HojaRuta; busy: boolean; onAccept: () => void }) {
@@ -39,7 +39,7 @@ function AvailableTrip({ route, busy, onAccept }: { route: HojaRuta; busy: boole
     <Action title="Aceptar viaje" disabled={busy || !ready} onPress={onAccept} />
   </View>;
 }
-export default function ChoferDashboard() {
+export default function PanelChofer() {
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy');
   const [selected, setSelected] = useState<HojaRuta | null>(null);
   const session = useSessionStore((state) => state.session)!;
@@ -97,7 +97,7 @@ export default function ChoferDashboard() {
         {odometers.isError && <Text style={styles.subtitle}>No se pudo consultar el odómetro anterior. Verificá el tablero del vehículo.</Text>}
         <Text style={styles.heading}>Odómetro inicial (km)</Text>
         <TextInput accessibilityLabel="Odómetro inicial" placeholder="Valor del tablero" keyboardType="decimal-pad" value={kilometers} onChangeText={setKilometers} editable={!accept.isPending && !blocked} style={ui.input} />
-        <OdometerPhoto uri={photoUri} onChange={setPhotoUri} disabled={accept.isPending || blocked} onBusyChange={setPhotoBusy} />
+        <FotoOdometro uri={photoUri} onChange={setPhotoUri} disabled={accept.isPending || blocked} onBusyChange={setPhotoBusy} />
         {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
         <Action title={accept.isPending ? 'Confirmando…' : 'Confirmar y comenzar'} onPress={() => { void confirm(); }} disabled={!kilometers.trim() || !photoUri || photoBusy || accept.isPending || blocked} />
       </BoardModal>}

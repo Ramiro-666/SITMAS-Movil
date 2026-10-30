@@ -54,7 +54,7 @@ function RouteCard({ route, origins, busy, onAssign, onMap, onSelect, onDelete }
     </View>
   </DropTarget>;
 }
-export default function RoutePlanner({ header, footer }: { header: React.ReactElement; footer: React.ReactElement }) {
+export default function PlanificadorRutas({ header, footer }: { header: React.ReactElement; footer: React.ReactElement }) {
   const client = useQueryClient();
   const { width } = useWindowDimensions();
   const wide = width >= 850;

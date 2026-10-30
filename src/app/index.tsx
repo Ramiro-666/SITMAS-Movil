@@ -11,15 +11,15 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import InicioDashboard from '../components/InicioDashboard';
-import ChoferDashboard from '../components/ChoferDashboard';
+import PanelInicio from '../components/PanelInicio';
+import PanelChofer from '../components/PanelChofer';
 import { isDriverRole } from '../services/driver-routes';
 import {
   CatalogABM,
   TiposVehiculoABM,
   VehiculosABM,
 } from '../components/LogisticaABM';
-import RoutePlanner from '../components/RoutePlanner';
+import PlanificadorRutas from '../components/PlanificadorRutas';
 import { ApiError, InvalidSessionError, sitmasApi } from '../services/sitmas-api';
 import { MobileAccessDeniedError } from '../services/mobile-access';
 import { useIsMutating } from '@tanstack/react-query';
@@ -349,7 +349,7 @@ function Logistica({ footer }: { footer: React.ReactElement }) {
       </View>
     </>
   );
-  if (tool === 'hojas') return <RoutePlanner header={header} footer={footer} />;
+  if (tool === 'hojas') return <PlanificadorRutas header={header} footer={footer} />;
   if (tool === 'vehiculos')
     return <VehiculosABM header={header} footer={footer} />;
   if (tool === 'marcas' || tool === 'modelos')
@@ -599,7 +599,7 @@ function AppShell() {
         <Logistica footer={footer} />
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
-          {driver ? <ChoferDashboard /> : section === 'inicio' ? <InicioDashboard /> : <Configuracion />}
+          {driver ? <PanelChofer /> : section === 'inicio' ? <PanelInicio /> : <Configuracion />}
           {footer}
         </ScrollView>
       )}

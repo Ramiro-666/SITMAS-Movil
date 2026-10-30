@@ -4,7 +4,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Text } from './AppText';
 import { Action, ui } from './route-board/BoardUI';
 
-export default function OdometerPhoto({ uri, onChange, disabled, onBusyChange }: {
+export default function FotoOdometro({ uri, onChange, disabled, onBusyChange }: {
   uri: string; onChange: (uri: string) => void; disabled: boolean; onBusyChange: (busy: boolean) => void;
 }) {
   const [permission, requestPermission] = useCameraPermissions();

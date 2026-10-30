@@ -14,7 +14,7 @@ import { saveSpontaneousStop, StopWriteError } from '../services/spontaneous-sto
 import type { CatalogItem, HojaRuta } from '../services/sitmas-api';
 import type { Coordinate } from '../services/route-geometry';
 
-export default function DriverTripMap({ route, origins }: { route: HojaRuta; origins: CatalogItem[] }) {
+export default function MapaViajeChofer({ route, origins }: { route: HojaRuta; origins: CatalogItem[] }) {
   const session = useSessionStore((state) => state.session)!;
   const writing = useIsMutating() > 0;
   const [finishing, setFinishing] = useState(false);

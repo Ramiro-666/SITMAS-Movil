@@ -67,7 +67,7 @@ test('el marcador nativo se vuelve a montar con su número nuevo al reordenar pa
 
 test('finalizar sugiere odómetro entero hacia arriba y conserva un cierre ya confirmado', () => {
   const React = require('react');
-  const source = fs.readFileSync(require.resolve('../src/components/DriverTripMap.tsx'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/components/MapaViajeChofer.tsx'), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   for (const [distance, final, expected] of [[52670, undefined, '69676'], [52000, undefined, '69675'], [0, undefined, '69623'], [52670, 69675.67, '69675.67']]) {
     let stateIndex = 0, suggestion;
@@ -704,7 +704,7 @@ test('inicio sin foto del odómetro no consulta ni escribe en SITMAS', async () 
 
 test('foto de odómetro pide permiso, espera la cámara, permite reintentar y usa una URI temporal', async () => {
   const React = require('react');
-  const source = fs.readFileSync(require.resolve('../src/components/OdometerPhoto.tsx'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/components/FotoOdometro.tsx'), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const states = [], refs = [];
   let stateIndex = 0, refIndex = 0, requested = 0, settings = 0, busy = false, uri = '', failCapture = true;
@@ -759,14 +759,14 @@ test('foto de odómetro pide permiso, espera la cámara, permite reintentar y us
 
 test('formulario del chofer exige kilómetros y foto y bloquea confirmar durante la captura', async () => {
   const React = require('react');
-  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/components/ChoferDashboard.tsx'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/components/PanelChofer.tsx'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const states = ['hoy', null, { Id: 82, Id_Vehiculo: 2 }, '1000', '', false, '', false];
   let index = 0, writes = 0;
   const module = { exports: {} };
   const stubs = {
     react: { ...React, useState: () => { const i = index++; return [states[i], value => { states[i] = value; }]; } },
     'react-native': { View: 'View', Pressable: 'Pressable', StyleSheet: { create: value => value } },
-    './AppText': { Text: 'Text', TextInput: 'Input' }, './OdometerPhoto': { default: 'OdometerPhoto', __esModule: true },
+    './AppText': { Text: 'Text', TextInput: 'Input' }, './FotoOdometro': { default: 'FotoOdometro', __esModule: true },
     './route-board/BoardUI': { Action: 'Action', BoardModal: 'BoardModal', ui: {} },
     '../query/sitmas': { keys: {}, queries: { odometrosVehiculo: () => [] }, useSitmasQuery: () => ({ isSuccess: true, data: [] }), useSitmasMutation: () => ({ isPending: false, run: async () => { writes++; } }) },
     '../state/session-store': { useSessionStore: selector => selector({ session: { idUsuario: 11 } }) },
@@ -1001,7 +1001,7 @@ test('la dona web renderiza sin propiedades DOM inválidas', () => {
     Module._load = function(name, ...args) { return name === 'react-native' ? rn : load.call(this, name, ...args); };
     svg = require('react-native-svg/lib/commonjs/elements.web');
   } finally { Module._load = load; }
-  const source = fs.readFileSync(require.resolve('../src/components/RecoveredMaterials.tsx'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/components/MaterialesRecuperados.tsx'), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const output = {};
   const localRequire = (name) => {

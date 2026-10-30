@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { queries, useSitmasQuery } from '../query/sitmas';
 import { useQueryClient } from '@tanstack/react-query';
-import RecoveredMaterials from './RecoveredMaterials';
+import MaterialesRecuperados from './MaterialesRecuperados';
 
 const palette = [
   '#16a6c9',
@@ -104,7 +104,7 @@ function Empty({ error }: { error?: boolean }) {
   );
 }
 
-export default function InicioDashboard() {
+export default function PanelInicio() {
   const client = useQueryClient();
   const pendingQuery = useSitmasQuery(queries.pendientes);
   const pendingTasks = pendingQuery.data ?? [];
@@ -134,7 +134,7 @@ export default function InicioDashboard() {
     </View>
     {(stockQuery.isError || stockQuery.fetchStatus === 'paused') && stockQuery.data &&
       <Text accessibilityRole="alert" style={{ color: '#b23030', marginBottom: 8 }}>No se pudo actualizar el stock. Se muestran los últimos datos disponibles.</Text>}
-      <RecoveredMaterials />
+      <MaterialesRecuperados />
       <Panel
         eyebrow="INVENTARIO"
         title="Stock disponible"

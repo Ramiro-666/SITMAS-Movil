@@ -11,7 +11,7 @@ const provisional = [
   { material: 'Madera', kg: 600 }, { material: 'Papel', kg: 350 }, { material: 'Metales', kg: 200 },
 ];
 
-export default function RecoveredMaterials() {
+export default function MaterialesRecuperados() {
   const [preview, setPreview] = useState(true);
   const query = useSitmasQuery(queries.recuperados, !preview);
   const rows = preview ? provisional : query.data?.materiales ?? [];
