@@ -10,7 +10,6 @@ import {
 import { queries, useSitmasQuery } from '../query/sitmas';
 import { useQueryClient } from '@tanstack/react-query';
 import RecoveredMaterials from './RecoveredMaterials';
-import { previousDayTasks } from '../services/pending-alert';
 
 const palette = [
   '#16a6c9',
@@ -108,7 +107,7 @@ function Empty({ error }: { error?: boolean }) {
 export default function InicioDashboard() {
   const client = useQueryClient();
   const pendingQuery = useSitmasQuery(queries.pendientes);
-  const yesterdayTasks = previousDayTasks(pendingQuery.data ?? []);
+  const pendingTasks = pendingQuery.data ?? [];
   const stockQuery = useSitmasQuery(queries.stock);
   const stock = stockQuery.data ?? [];
   const errors = { stock: stockQuery.isError && !stockQuery.data };
@@ -124,8 +123,8 @@ export default function InicioDashboard() {
   }, [progress, stockQuery.dataUpdatedAt]);
   return <View>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
-      {yesterdayTasks.length > 0 && <View accessibilityRole="alert" style={{ flex: 1, backgroundColor: '#fff3d6', borderColor: '#edc776', borderWidth: 1, borderRadius: 10, padding: 10 }}>
-        <Text style={{ color: '#76500c', fontSize: 12, fontWeight: '800' }}>⚠ {yesterdayTasks.length === 1 ? '1 tarea de ayer sin asignar' : `${yesterdayTasks.length} tareas de ayer sin asignar`}</Text>
+      {pendingTasks.length > 0 && <View accessibilityRole="alert" style={{ flex: 1, backgroundColor: '#fff3d6', borderColor: '#edc776', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+        <Text style={{ color: '#76500c', fontSize: 12, fontWeight: '800' }}>⚠ {pendingTasks.length === 1 ? '1 tarea sin asignar' : `${pendingTasks.length} tareas sin asignar`}</Text>
       </View>}
       {pendingQuery.isError && <Text accessibilityRole="alert" style={{ flex: 1, color: '#a32c2c', fontSize: 11 }}>No se pudieron actualizar las tareas pendientes.</Text>}
     <Pressable onPress={() => { void Promise.all([stockQuery.refetch(), pendingQuery.refetch(), client.invalidateQueries({ queryKey: queries.recuperados.queryKey })]); }} disabled={stockQuery.isFetching || pendingQuery.isFetching}

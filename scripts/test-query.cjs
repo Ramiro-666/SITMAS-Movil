@@ -259,7 +259,7 @@ test('salir cancela peticiones y limpia los datos del usuario anterior', async (
   assert.equal(queryClient.getQueryCache().getAll().length, 0);
   useSessionStore
     .getState()
-    .signIn({ idUsuario: 2, nombre: 'Otro', rol: 'Prueba' });
+    .signIn({ idUsuario: 11, nombre: 'Mauro Gerosa', rol: 'Operador_Logistica' });
   assert.equal(queryClient.getQueryData(keys.marcas), undefined);
 });
 
@@ -285,6 +285,100 @@ test('login distingue un rechazo de credenciales de un fallo de conexión', asyn
     sitmasApi.login('usuario-de-prueba', 'clave-de-prueba'),
     (error) => error === disconnected && !(error instanceof ApiError),
   );
+});
+
+test('login conserva el aviso solicitado cuando el servidor móvil rechaza la cuenta', async () => {
+  const { MobileAccessDeniedError } = require('../src/services/mobile-access.ts');
+  global.fetch = async () => Response.json({ Message: 'Acceso móvil denegado.' }, { status: 403 });
+  await assert.rejects(sitmasApi.login('otra-cuenta', 'fixture'), error => error instanceof MobileAccessDeniedError && /comuníquese con su supervisor/.test(error.message));
+});
+
+test('acceso móvil admite solo las cuentas verificadas de Juan y Mauro', async () => {
+  const denied = /Su usuario no tiene los permisos necesarios para utilizar SITMAS Móvil, comuníquese con su supervisor\./;
+  for (const idUsuario of [1, 11]) {
+    const session = { idUsuario, nombre: idUsuario === 1 ? 'Juan Videla' : 'Mauro Gerosa', rol: idUsuario === 1 ? 'Administrador' : 'Operador_Logistica', token: 'prueba' };
+    global.fetch = async () => Response.json(session);
+    assert.deepEqual(await sitmasApi.login('cuenta', 'clave'), session);
+    useSessionStore.getState().signIn(session);
+    assert.deepEqual(useSessionStore.getState().session, session);
+    useSessionStore.getState().signOut();
+  }
+  for (const idUsuario of [2, 8, 12]) {
+    const session = { idUsuario, nombre: 'Juan Videla', rol: 'Administrador', token: 'no-admitido' };
+    global.fetch = async () => Response.json(session);
+    await assert.rejects(sitmasApi.login('otra-cuenta', 'clave'), denied);
+    assert.throws(() => useSessionStore.getState().signIn(session), denied);
+    assert.equal(useSessionStore.getState().session, null);
+  }
+  global.fetch = async (_, init) => { assert.equal(init.headers.Authorization, undefined); return Response.json([]); };
+  await sitmasApi.rutasHoy();
+});
+
+test('contratos actuales: catálogo de materiales y mantenimiento de vehículos', async () => {
+  const calls = [];
+  global.fetch = async (url, init) => { calls.push([String(url).split('/api/')[1], init.method ?? 'GET', init.body]); return Response.json([]); };
+  const vehicle = { Patente: 'ABC123', Id_Modelo: 1, Id_Tipo: 2 };
+  await sitmasApi.materiales();
+  await sitmasApi.guardarVehiculo(vehicle);
+  await sitmasApi.guardarVehiculo(vehicle, 5);
+  await sitmasApi.borrarVehiculo(5);
+  assert.deepEqual(calls, [
+    ['TP_Material', 'GET', undefined],
+    ['Vehiculo', 'POST', JSON.stringify(vehicle)],
+    ['Vehiculo/5', 'PUT', JSON.stringify(vehicle)],
+    ['Vehiculo/5', 'DELETE', undefined],
+  ]);
+});
+
+test('el rol vigente Operador_Logistica abre el perfil del chofer', () => {
+  const { isDriverRole } = require('../src/services/driver-routes.ts');
+  assert.equal(isDriverRole('Operador_Logistica'), true);
+  assert.equal(isDriverRole('Operador, Operador_Logistica'), true);
+  assert.equal(isDriverRole('Administrador'), false);
+});
+
+test('login muestra el rechazo debajo de Ingresar y no abre una sesión', async () => {
+  const React = require('react');
+  const { MobileAccessDeniedError } = require('../src/services/mobile-access.ts');
+  const source = fs.readFileSync(require.resolve('../src/app/index.tsx'), 'utf8');
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const values = ['otra-cuenta', 'clave', ''];
+  let index = 0, signedIn = false;
+  const denied = new MobileAccessDeniedError();
+  const module = { exports: {} };
+  const stubs = {
+    react: { ...React, useEffect: () => {}, useRef: value => ({ current: value }), useState: initial => { const key = index++; return [values[key] ?? initial, value => { values[key] = value; }]; } },
+    'react-native': { View: 'View', Pressable: 'Pressable', Image: 'Image', StyleSheet: { create: value => value }, useWindowDimensions: () => ({ width: 400 }), Animated: { View: 'AnimatedView', Value: class { interpolate() { return 0; } } } },
+    '../components/AppText': { Text: 'Text', TextInput: 'Input' },
+    '../state/session-store': { useSessionStore: selector => selector({ session: null, signIn: () => { signedIn = true; } }) },
+    '../query/sitmas': { useSitmasMutation: () => ({ isPending: false, run: async () => { throw denied; } }) },
+    '../services/sitmas-api': require('../src/services/sitmas-api.ts'),
+    '../services/mobile-access': require('../src/services/mobile-access.ts'),
+  };
+  new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? (name.startsWith('.') || name.startsWith('@/') ? {} : require(name)), module, module.exports);
+  const Login = module.exports.default().props.children.type;
+  function find(element, predicate) {
+    if (!React.isValidElement(element)) return undefined;
+    if (predicate(element)) return element;
+    return React.Children.toArray(element.props.children).map(child => find(child, predicate)).find(Boolean);
+  }
+  const before = Login();
+  await find(before, element => element.type === 'Pressable').props.onPress();
+  index = 0;
+  const after = Login();
+  const form = find(after, element => React.Children.toArray(element.props.children).some(child => child.props?.accessibilityRole === 'alert'));
+  const children = React.Children.toArray(form.props.children);
+  const buttonIndex = children.findIndex(child => child.type === 'Pressable');
+  const alertIndex = children.findIndex(child => child.props.accessibilityRole === 'alert');
+  assert.ok(alertIndex > buttonIndex);
+  assert.equal(children[alertIndex].props.children, denied.message);
+  assert.equal(signedIn, false);
+});
+
+test('recuperados acepta el subtipo actual devuelto por SITMAS', () => {
+  const { recoveredThisWeek } = require('../src/services/recovered-materials.ts');
+  const row = { FechaClasificacion: '2026-10-28T12:00:00', PesoUtil: 10, EstadoMtCl: 'Procesado', SubtipoMaterial: 'Cartón' };
+  assert.deepEqual(recoveredThisWeek([row], new Date('2026-10-28T16:00:00Z')).materiales, [{ material: 'Cartón', kg: 10 }]);
 });
 
 const { fetchRoadRoute } = require('../src/services/route-geometry.ts');
@@ -771,7 +865,7 @@ test('registro persistente se recupera al reiniciar y rechaza estados incompleto
 
 test('recuperados semanales: lunes a domingo, solo procesados y pesos útiles', () => {
   const { recoveredThisWeek } = require('../src/services/recovered-materials.ts');
-  const row = (FechaClasificacion, PesoUtil, EstadoMtCl = 'Procesado', MaterialOriginal = 'Madera - Tarimas') => ({ FechaClasificacion, PesoUtil, EstadoMtCl, MaterialOriginal });
+  const row = (FechaClasificacion, PesoUtil, EstadoMtCl = 'Procesado', SubtipoMaterial = 'Madera - Tarimas') => ({ FechaClasificacion, PesoUtil, EstadoMtCl, SubtipoMaterial });
   const report = recoveredThisWeek([
     row('2026-10-12T00:00:00', 2), row('2026-10-18T23:59:59', 3),
     row('2026-10-11T23:59:59', 100), row('2026-10-19T00:00:00', 100),
@@ -824,11 +918,11 @@ test('la dona web renderiza sin propiedades DOM inválidas', () => {
   assert.deepEqual(warnings.filter((warning) => /does not recognize|Invalid DOM property/.test(warning)), []);
 });
 
-test('alerta de ayer: fecha prevista, sin hoja, sin inventar fechas antiguas', () => {
-  const { previousDayTasks, validPlannedDate } = require('../src/services/pending-alert.ts');
-  const yesterday = { Id_Detalle_HDR: 1, Id_HojaRuta: null, FechaPrevista: '2026-10-13T00:00:00' };
-  assert.deepEqual(previousDayTasks([yesterday, { ...yesterday, Id_HojaRuta: 2 }, { ...yesterday, FechaPrevista: null }, { ...yesterday, FechaPrevista: '2026-10-14' }, { ...yesterday, FechaPrevista: '2026-10-12' }], new Date('2026-10-15T01:00:00Z')), [yesterday]);
+test('fecha de cabecera rechaza fechas inexistentes y conserva días válidos', () => {
+  const { validPlannedDate } = require('../src/services/pending-alert.ts');
   assert.equal(validPlannedDate('2026-02-30'), false);
   assert.equal(validPlannedDate('2026-10-13'), true);
-  assert.equal(previousDayTasks([{ ...yesterday, FechaPrevista: '2026-09-30' }], new Date('2026-10-01T12:00:00Z')).length, 1);
+  assert.equal(validPlannedDate('2028-02-29'), true);
+  assert.equal(validPlannedDate('2026-02-29'), false);
+  assert.equal(validPlannedDate(''), false);
 });

@@ -3,7 +3,7 @@ const https = require('node:https');
 const tls = require('node:tls');
 const fs = require('node:fs');
 const path = require('node:path');
-const { X509Certificate } = require('node:crypto');
+const { X509Certificate, createHmac } = require('node:crypto');
 const assert = require('node:assert/strict');
 const certificate = fs.readFileSync(path.join(__dirname, '../.local/lan-api/server.crt'));
 const ip = new X509Certificate(certificate).subjectAltName.match(/^IP Address:([\d.]+)$/)[1];
@@ -26,7 +26,10 @@ function get(urlPath, host = `${ip}:8443`, authorization) {
 (async () => {
   const result = await get('/api/hojaruta/hoy');
   assert.equal(result.status, 401);
-  const backend = await get('/api/hojaruta/hoy', `${ip}:8443`, 'Bearer invalid-pilot-test');
+  // JWT con forma válida y firma deliberadamente ajena: debe llegar a la validación original.
+  const payload = [Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url'), Buffer.from(JSON.stringify({ sub: '1', exp: Math.floor(Date.now() / 1000) + 300 })).toString('base64url')].join('.');
+  const forged = payload + '.' + createHmac('sha256', 'fixture-only-not-sitmas').update(payload).digest('base64url');
+  const backend = await get('/api/hojaruta/hoy', `${ip}:8443`, `Bearer ${forged}`);
   assert.equal(backend.status, 401, backend.body);
   assert.match(backend.body, /Token inválido o expirado/);
   assert.equal((await get('/')).status, 404);

@@ -4,38 +4,12 @@ const path = require('node:path');
 
 function createLanServer({ folder, ip }) {
   const upstreamCa = fs.readFileSync(path.join(folder, 'upstream.crt'));
+  const { createMobileHandler, createUpstream } = require('./mobile-api.cjs');
   const server = https.createServer({
     key: fs.readFileSync(path.join(folder, 'server.key')),
     cert: fs.readFileSync(path.join(folder, 'server.crt')),
     minVersion: 'TLSv1.2',
-  }, (req, res) => {
-    if (req.headers.host !== `${ip}:8443` || !req.url.startsWith('/api/')) {
-      res.writeHead(404).end();
-      return;
-    }
-    const login = req.method === 'POST' && req.url.toLowerCase() === '/api/usuario/login';
-    if (!login && !/^Bearer \S+$/.test(req.headers.authorization ?? '')) {
-      res.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ Message: 'Iniciá sesión para consultar SITMAS.' }));
-      return;
-    }
-    const headers = { ...req.headers, host: 'localhost:44325' };
-    delete headers.connection;
-    const upstream = https.request({
-      hostname: 'localhost', port: 44325, path: req.url, method: req.method,
-      headers, ca: upstreamCa, timeout: 20000,
-    }, (response) => {
-      res.writeHead(response.statusCode, response.headers);
-      response.pipe(res);
-    });
-    upstream.on('timeout', () => upstream.destroy(new Error('Tiempo de espera agotado')));
-    upstream.on('error', () => {
-      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' }).end(JSON.stringify({ Message: 'No se pudo consultar la API local. Comprobá SITMAS y su certificado.' }));
-      else res.destroy();
-    });
-    req.on('aborted', () => upstream.destroy());
-    res.on('close', () => { if (!res.writableFinished) upstream.destroy(); });
-    req.pipe(upstream);
-  });
+  }, createMobileHandler({ upstream: createUpstream(upstreamCa), hosts: [ip] }));
   server.requestTimeout = 30000;
   return server;
 }

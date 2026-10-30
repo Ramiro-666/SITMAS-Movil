@@ -15,7 +15,7 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.sitmas.movil",
-      "versionCode": 3,
+      "versionCode": 4,
       "predictiveBackGestureEnabled": false
     },
     "web": {

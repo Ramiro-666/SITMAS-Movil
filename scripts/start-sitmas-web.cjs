@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, '..');
 process.env.NODE_ENV ||= 'development';
 load(root);
 const api = (
-  process.env.EXPO_PUBLIC_SITMAS_API_URL || 'https://localhost:44325/api'
+  process.env.EXPO_PUBLIC_SITMAS_API_URL || 'http://localhost:8098/api'
 ).replace(/\/$/, '');
 const target = new URL(api);
 if (
@@ -33,7 +33,7 @@ if (process.argv.includes('--legacy-demo'))
     'web:demo ahora abre SITMAS con datos reales. Podés usar npm run web.',
   );
 console.log('API SITMAS: ' + api);
-console.log('Ingresá con tu cuenta de SITMAS. La API debe estar iniciada.');
+console.log('Ingresá como Juan o Mauro. Deben estar iniciados la API y el acceso móvil protegido (npm run api:mobile o npm run api:lan).');
 const cli = path.join(
   path.dirname(require.resolve('expo/package.json')),
   'bin',

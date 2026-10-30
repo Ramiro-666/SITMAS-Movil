@@ -2,7 +2,34 @@
 
 Aplicación de Expo y React Native conectada a la API de SITMAS y su base SQL Server. TanStack Query gestiona los datos remotos y Zustand mantiene la sesión del usuario y el estado de interacción del tablero en memoria.
 
-## Estado actual · 20/10/2026
+## Estado actual · 30/10/2026
+
+### APK actual · 28/10/2026
+
+La **APK 1.0.0, versionCode 4** se compiló correctamente en Expo e incluye la compatibilidad con la API actual y el acceso móvil exclusivo de Juan y Mauro. Conserva la firma para instalar como actualización. La instalación y validación de esta versión en un celular siguen pendientes de confirmación.
+
+[Descargar APK](https://expo.dev/artifacts/eas/iw6DnH51t58-ux-bnIVlTIwqDq1ynHW-323VjQyeGko.apk) · [Compilación en Expo](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/2086417b-47e3-4a78-882c-24e65a9ae04d). Requiere la misma LAN, la API y el puente HTTPS encendidos. El enlace interno vence el 11/11/2026 y el certificado del piloto el 17/11/2026.
+
+### Compatibilidad con SITMAS · 28/10/2026
+
+El acceso móvil admite únicamente las cuentas existentes de Juan Videla (usuario 1) y Mauro Gerosa (usuario 11), después de que la API valide sus credenciales. Las demás cuentas permanecen en el login con el aviso: «Su usuario no tiene los permisos necesarios para utilizar SITMAS Móvil, comuníquese con su supervisor». La restricción se aplica tanto en el cliente como en el puente de `my-app`; no cambia la autorización de la API original.
+
+La integración usa el rol `Operador_Logistica`, el catálogo `GET /api/TP_Material`, el mantenimiento de vehículos mediante `POST /api/Vehiculo`, `PUT /api/Vehiculo/{id}` y `DELETE /api/Vehiculo/{id}`, y el campo `SubtipoMaterial` de clasificación. Las tareas pendientes no solicitan fecha propia: la API y la base actuales no almacenan `FechaPrevista`; la fecha corresponde a la hoja asignada. El inicio informa todas las tareas sin asignar.
+
+Los endpoints de peso bruto y rendimiento del servidor devuelven errores SQL; no se utilizan en las pantallas actuales. La API original sigue requiriendo mejoras de autorización. Estos cambios no modifican SITMAS principal ni su base y están incluidos en la APK versionCode 4.
+
+### Acceso móvil protegido · 28/10/2026
+
+Todas las consultas móviles deben pasar por el puente incluido en `my-app`. El puente comprueba que el JWT pertenece a Juan o Mauro y consulta `Usuario/ListarPorId/{id}` con ese Bearer en cada solicitud: SITMAS original valida la firma y el vencimiento, y el puente exige que la cuenta siga activa. Decodificar el JWT por sí solo nunca permite acceder. Si la validación falla o la API no responde, no se entrega información. El login de otra cuenta recibe 403 sin devolver su token. Solo se exponen los endpoints utilizados por la app; se bloquean, por ejemplo, los listados de usuarios.
+
+- **Web en esta PC:** iniciar SITMAS original, ejecutar `npm run api:mobile` y luego `npm run web` (o iniciar Expo en 8081). La URL de desarrollo es `http://localhost:8098/api`; ese servidor escucha únicamente en `127.0.0.1` y admite los orígenes locales 8081/8082. HTTP se usa solo para el tramo de desarrollo dentro de esta PC. La conexión del puente a SITMAS conserva HTTPS con el certificado verificado.
+- **APK en la LAN:** iniciar SITMAS original y `npm run api:lan`; conserva el certificado y la URL HTTPS del piloto, `https://192.168.100.2:8443/api`. Reiniciar una instancia anterior del puente para aplicar la protección nueva. Comprobar con `npm run api:lan:check`.
+- Reiniciar Expo tras cambiar `.env.local` y volver a iniciar sesión. La URL directa `https://localhost:44325/api` no debe configurarse en el cliente móvil y se rechaza explícitamente. Para un despliegue futuro, la URL pública debe corresponder a este puente protegido con HTTPS, no directamente a la API original.
+- La API original sigue siendo accesible por su propia dirección y conserva sus usuarios y sus limitaciones de autorización. Proteger el puente móvil no impide acceder a esa otra dirección. Resolver esa exposición exige cambios fuera de `my-app`, que no están autorizados en esta tarea.
+
+Las sesiones usan el vencimiento del JWT original (8 horas): cerrar sesión limpia token y caché del cliente, pero no revoca una copia del token en el backend. No se copiaron claves JWT, credenciales ni configuraciones de SITMAS principal.
+
+### Piloto Android instalado · 20/10/2026
 
 El piloto Android por Wi-Fi local está instalado y el usuario confirmó el funcionamiento de la **APK 1.0.0, versionCode 3**. Se probaron el acceso con administrador y chofer, las rutas de prueba, el mapa y las paradas espontáneas. La última actualización corrige la numeración de los marcadores después de reordenar el recorrido, redondea hacia arriba el odómetro sugerido al finalizar y muestra «Bio» blanco centrado en la notificación GPS.
 
@@ -106,7 +133,7 @@ La configuración local se define en `.env.local`:
 
 | Variable | Uso |
 | --- | --- |
-| `EXPO_PUBLIC_SITMAS_API_URL` | API de SITMAS; por defecto `https://localhost:44325/api` |
+| `EXPO_PUBLIC_SITMAS_API_URL` | Puente móvil protegido; por defecto `http://localhost:8098/api` para desarrollo en esta PC. En la APK LAN, HTTPS en 8443. |
 | `EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY` | Clave de Maps JavaScript API con permisos para localhost |
 | `EXPO_PUBLIC_OSRM_URL` | Servidor de cálculo vial; por defecto `https://router.project-osrm.org` |
 

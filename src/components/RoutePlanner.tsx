@@ -75,7 +75,6 @@ export default function RoutePlanner({ header, footer }: { header: React.ReactEl
   useEffect(() => () => useRouteBoardStore.getState().reset(), []);
   const [form, setForm] = useState<'task' | 'route' | null>(null);
   const [draft, setDraft] = useState(emptyTask);
-  const [taskDate, setTaskDate] = useState(today);
   const [routeDraft, setRouteDraft] = useState({ date: today(), vehicle: 0 });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -106,14 +105,13 @@ export default function RoutePlanner({ header, footer }: { header: React.ReactEl
     void perform(() => assignPendingTask(taskId, routeId, assignedState, origins, task.Id_HojaRuta || null), (message) => { board.selectTask(null); setNotice(String(message)); });
   }
   function createTask() {
-    if (!validPlannedDate(taskDate)) { setError('Ingresá una fecha prevista válida (AAAA-MM-DD).'); return; }
     if (!draft.Id_TipoMovimiento || !draft.Id_Origen) { setError('Seleccioná el movimiento y el origen de la tarea.'); return; }
     const state = stateId('Pendiente');
     if (!state) { setError('No se pudo identificar el estado Pendiente.'); return; }
-    void perform(() => sitmasApi.crearParada({ ...draft, FechaPrevista: taskDate, Id_HojaRuta: null, Id_Estado: state, HoraEstimada: '00:00:00', DistanciaDesdeAnterior_Km: 0 }), () => { setForm(null); setDraft(emptyTask); setNotice('Tarea creada en la lista de pendientes.'); });
+    void perform(() => sitmasApi.crearParada({ ...draft, Id_HojaRuta: null, Id_Estado: state, HoraEstimada: '00:00:00', DistanciaDesdeAnterior_Km: 0 }), () => { setForm(null); setDraft(emptyTask); setNotice('Tarea creada en la lista de pendientes.'); });
   }
   function createRoute() {
-    const valid = /^\d{4}-\d{2}-\d{2}$/.test(routeDraft.date) && !Number.isNaN(Date.parse(routeDraft.date)) && new Date(routeDraft.date).toISOString().slice(0, 10) === routeDraft.date;
+    const valid = validPlannedDate(routeDraft.date);
     if (!valid || !routeDraft.vehicle) { setError('Ingresá una fecha válida y seleccioná el vehículo.'); return; }
     const state = stateId('Pendiente');
     if (!state) { setError('No se pudo identificar el estado Pendiente.'); return; }
@@ -155,9 +153,7 @@ export default function RoutePlanner({ header, footer }: { header: React.ReactEl
     {form && <BoardModal title={form === 'task' ? 'Nueva tarea pendiente' : 'Nueva cabecera'} busy={busy} onClose={() => { setForm(null); setError(''); }}>
       {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
       {form === 'task' ? <>
-        <Text style={ui.muted}>Se guardará en pendientes. Después podés asignarla a una hoja de ruta.</Text>
-        <Text style={ui.text}>Fecha prevista (AAAA-MM-DD)</Text>
-        <TextInput accessibilityLabel="Fecha prevista de la tarea" value={taskDate} onChangeText={setTaskDate} editable={!busy} placeholder="AAAA-MM-DD" style={ui.input} />
+        <Text style={ui.muted}>Se guardará en pendientes. La fecha se define al asignarla a una hoja de ruta.</Text>
         <SelectField label="Tipo de movimiento" value={draft.Id_TipoMovimiento} disabled={busy} options={options(movementsQuery.data ?? [], 'IdTipoMovimientos', 'TipoMovimientos')} onChange={(v) => setDraft((d) => ({ ...d, Id_TipoMovimiento: v }))} />
         <SelectField label="Origen de la tarea" value={draft.Id_Origen} disabled={busy} options={origins.map((o) => ({ id: Number(o.IdOrigen), text: `${o.EmpresaInstitucion} · #${o.IdOrigen}${typeof o.Latitud !== 'number' || typeof o.Longitud !== 'number' ? ' · Sin GPS' : ''}` }))} onChange={(v) => setDraft((d) => ({ ...d, Id_Origen: v }))} />
         {chosenOrigin && (typeof chosenOrigin.Latitud !== 'number' || typeof chosenOrigin.Longitud !== 'number') && <Text style={styles.warning}>Este origen no tiene coordenadas. La tarea se puede asignar, pero el circuito quedará incompleto hasta que se actualice en SITMAS.</Text>}

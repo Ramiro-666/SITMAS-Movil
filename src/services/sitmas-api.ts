@@ -1,7 +1,8 @@
 import { recoveredThisWeek } from './recovered-materials';
+import { assertMobileAccess, MobileAccessDeniedError } from './mobile-access';
 /** Cliente de la API SITMAS. Nunca conecta la aplicación directamente a SQL Server. */
 const configuredBase =
-  process.env.EXPO_PUBLIC_SITMAS_API_URL ?? 'https://localhost:44325/api';
+  process.env.EXPO_PUBLIC_SITMAS_API_URL ?? 'http://localhost:8098/api';
 const baseUrl = configuredBase.replace(/\/$/, '');
 let sessionToken: string | undefined;
 export function setSessionToken(token?: string) { sessionToken = token; }
@@ -68,7 +69,6 @@ export type TipoVehiculo = {
   TipoVehiculo?: string;
 };
 export type Parada = {
-  FechaPrevista?: string | null;
   Id_Detalle_HDR: number;
   Id_HojaRuta: number | null;
   Id_TipoMovimiento: number;
@@ -122,6 +122,9 @@ function validateSession(value: unknown): Session {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]):44325(?:\/|$)/i.test(baseUrl)) {
+    throw new Error('Configurá el acceso móvil protegido; no la URL directa de SITMAS.');
+  }
   if (
     /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]):8097(?:\/|$)/i.test(baseUrl)
   ) {
@@ -152,6 +155,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* respuesta de texto */
     }
+    if (response.status === 403 && path === 'Usuario/Login') throw new MobileAccessDeniedError();
     if (!response.ok)
       throw new ApiError(
         response.status,
@@ -178,23 +182,26 @@ export const sitmasApi = {
     request<{ Mensaje: string }>(`hojaruta/${id}/distanciatotal`, {
       method: 'PATCH', body: JSON.stringify({ DistanciaTotal }),
     }),
-  login: async (Usuario: string, Password: string) =>
-    validateSession(await request<unknown>('Usuario/Login', {
+  login: async (Usuario: string, Password: string) => {
+    const session = validateSession(await request<unknown>('Usuario/Login', {
       method: 'POST',
       body: JSON.stringify({ Usuario, Password }),
-    })),
+    }));
+    assertMobileAccess(session);
+    return session;
+  },
   vehiculos: (signal?: AbortSignal) =>
     request<Vehiculo[]>('Vehiculo/ListarTodo', { signal }),
   guardarVehiculo: (
     data: Pick<Vehiculo, 'Patente' | 'Id_Modelo' | 'Id_Tipo'>,
     id?: number,
   ) =>
-    request<void>(id ? `Vehiculo/Modificar/${id}` : 'Vehiculo/Insertar', {
-      method: 'POST',
+    request<void>(id ? `Vehiculo/${id}` : 'Vehiculo', {
+      method: id ? 'PUT' : 'POST',
       body: JSON.stringify(data),
     }),
   borrarVehiculo: (id: number) =>
-    request<void>(`Vehiculo/Borrar/${id}`, { method: 'POST' }),
+    request<void>(`Vehiculo/${id}`, { method: 'DELETE' }),
   tiposVehiculo: (signal?: AbortSignal) =>
     request<TipoVehiculo[]>('Tp_Vehiculo/ListarTodo', { signal }),
   guardarTipoVehiculo: (nombre: string, id?: number) =>
@@ -258,7 +265,7 @@ export const sitmasApi = {
   origenes: (signal?: AbortSignal) =>
     request<CatalogItem[]>('origen', { signal }),
   materiales: (signal?: AbortSignal) =>
-    request<CatalogItem[]>('TP_Material/ListarTodo', { signal }),
+    request<CatalogItem[]>('TP_Material', { signal }),
   estadosHojaRuta: (signal?: AbortSignal) =>
     request<CatalogItem[]>('EST_HDR/ListarTodo', { signal }),
   materialesRecuperados: async (signal?: AbortSignal) => recoveredThisWeek(await request<Parameters<typeof recoveredThisWeek>[0]>('MaterialClasificado/ListarVista', { signal })),

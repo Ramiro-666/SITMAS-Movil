@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Session } from '../services/sitmas-api';
 import { setSessionToken } from '../services/sitmas-api';
 import { queryClient } from '../query/client';
+import { assertMobileAccess } from '../services/mobile-access';
 
 type SessionState = {
   session: Session | null;
@@ -14,6 +15,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   session: null,
   // Zustand actualiza la sesión; limpiamos Query para no mezclar usuarios.
   signIn: (session) => {
+    assertMobileAccess(session);
     setSessionToken(session.token);
     queryClient.clear();
     set({ session });

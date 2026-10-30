@@ -21,6 +21,7 @@ import {
 } from '../components/LogisticaABM';
 import RoutePlanner from '../components/RoutePlanner';
 import { ApiError, InvalidSessionError, sitmasApi } from '../services/sitmas-api';
+import { MobileAccessDeniedError } from '../services/mobile-access';
 import { useIsMutating } from '@tanstack/react-query';
 import { useSessionStore } from '../state/session-store';
 import {
@@ -156,7 +157,7 @@ function Login() {
       setPassword('');
       onLogin(session);
     } catch (error) {
-      if (error instanceof InvalidSessionError) {
+      if (error instanceof InvalidSessionError || error instanceof MobileAccessDeniedError) {
         setError(error.message);
       } else if (error instanceof ApiError) {
         setError(
@@ -234,7 +235,6 @@ function Login() {
             secureTextEntry
             editable={!loading}
           />
-          {!!error && <Text style={styles.loginError}>{error}</Text>}
           <Pressable
             onPress={enter}
             disabled={loading}
@@ -246,6 +246,7 @@ function Login() {
               <Text style={styles.enterText}>INGRESAR</Text>
             )}
           </Pressable>
+          {!!error && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.loginError}>{error}</Text>}
         </Animated.View>
         <Logo name="loginFooter" style={styles.loginFooter} />
       </Animated.View>

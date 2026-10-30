@@ -38,6 +38,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "api:mobile": "node scripts/start-mobile-api.cjs",
     "api:lan": "node scripts/start-lan-api.cjs",
     "api:lan:check": "node scripts/test-lan-api.cjs",
     "start": "expo start",
@@ -45,7 +46,7 @@
     "ios": "expo start --ios",
     "web": "node scripts/start-sitmas-web.cjs",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
-    "test": "node --test scripts/test-query.cjs",
+    "test": "node --test scripts/test-query.cjs scripts/test-mobile-api.cjs",
     "export:web": "expo export --platform web",
     "web:demo": "node scripts/start-sitmas-web.cjs --legacy-demo"
   },
