@@ -3,6 +3,7 @@ import { Image, Linking, Platform, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Text } from './AppText';
 import { Action, ui } from './route-board/BoardUI';
+import NivelCamara from './NivelCamara';
 
 export default function FotoOdometro({ uri, onChange, disabled, onBusyChange }: {
   uri: string; onChange: (uri: string) => void; disabled: boolean; onBusyChange: (busy: boolean) => void;
@@ -54,6 +55,7 @@ export default function FotoOdometro({ uri, onChange, disabled, onBusyChange }: 
       <CameraView ref={camera} facing="back" mode="picture" style={{ width: '100%', height: 280, borderRadius: 12 }}
         onCameraReady={() => setReady(true)}
         onMountError={() => { close(); setError('La cámara no está disponible. Revisá los permisos o intentá desde el celular.'); }} />
+      <NivelCamara activo={ready && !capturing} />
       <View style={ui.row}>
         <Action title={capturing ? 'Tomando foto…' : ready ? 'Tomar foto' : 'Preparando cámara…'} disabled={disabled || !ready || capturing} onPress={() => { void capture(); }} />
         <Action title="Cancelar foto" secondary disabled={capturing} onPress={close} />

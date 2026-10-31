@@ -5,13 +5,13 @@ import * as Location from 'expo-location';
 import { useQuery } from '@tanstack/react-query';
 import { Text } from './AppText';
 import { Action, ui } from './route-board/BoardUI';
-import { useSessionStore } from '../state/session-store';
+import { useSesion } from '../state/sesion';
 import { isDriverRole, ownRoutes } from '../services/driver-routes';
 import { syncTripLocation } from '../services/trip-location';
 import { queries } from '../query/sitmas';
 
 export default function LocationGate({ children }: { children: ReactNode }) {
-  const session = useSessionStore(state => state.session);
+  const session = useSesion(state => state.session);
   const driver = !!session && isDriverRole(session.rol);
   const routes = useQuery({ ...queries.hojas, enabled: driver, refetchInterval: 15000 });
   const trip = session && driver ? ownRoutes(routes.data ?? [], session).find(route => route.Id_Estado === 3) : undefined;
@@ -76,7 +76,7 @@ export default function LocationGate({ children }: { children: ReactNode }) {
         {!!(error || trackingError) && <Text accessibilityRole="alert" style={ui.error}>{error || trackingError}</Text>}
         {busy && <ActivityIndicator color="#087947" />}
         <Action title={!status.permission ? status.canAsk ? 'Permitir ubicación' : 'Abrir permisos' : !status.services ? 'Activar ubicación' : trip && !status.background ? 'Permitir ubicación durante el viaje' : 'Reintentar'} disabled={busy} onPress={() => { void enable(); }} />
-        {session && <Action secondary title="Cerrar sesión" onPress={() => useSessionStore.getState().signOut()} />}
+        {session && <Action secondary title="Cerrar sesión" onPress={() => useSesion.getState().signOut()} />}
       </View>
     </SafeAreaView>
   </Modal></>;

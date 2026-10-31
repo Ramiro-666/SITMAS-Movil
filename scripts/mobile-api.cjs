@@ -1,5 +1,5 @@
 const https = require('node:https');
-const { createTripAlerts } = require('./trip-alerts.cjs');
+const { crearAvisosViaje } = require('./avisos-viaje.cjs');
 const denied = 'Su usuario no tiene los permisos necesarios para utilizar SITMAS Móvil, comuníquese con su supervisor.';
 const allowed = id => id === 1 || id === 11;
 const routes = {
@@ -20,7 +20,7 @@ function claims(token) {
 }
 
 // La firma la valida SITMAS en cada consulta: decodificar el JWT nunca concede acceso.
-function createMobileHandler({ upstream, hosts, origins = [], alerts = createTripAlerts() }) {
+function createMobileHandler({ upstream, hosts, origins = [], alerts = crearAvisosViaje() }) {
   return async (req, res) => {
     const send = (status, value) => {
       if (!res.destroyed) res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(value));

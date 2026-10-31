@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Session } from '../services/sitmas-api';
 import { setSessionToken } from '../services/sitmas-api';
-import { queryClient } from '../query/client';
+import { queryClient } from '../query/cliente';
 import { assertMobileAccess } from '../services/mobile-access';
 
 type SessionState = {
@@ -11,7 +11,7 @@ type SessionState = {
 };
 
 // En memoria: no persistimos credenciales. Los datos remotos viven en Query.
-export const useSessionStore = create<SessionState>((set) => ({
+export const useSesion = create<SessionState>((set) => ({
   session: null,
   // Zustand actualiza la sesión; limpiamos Query para no mezclar usuarios.
   signIn: (session) => {

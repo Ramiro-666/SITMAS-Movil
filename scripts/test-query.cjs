@@ -14,9 +14,9 @@ require.extensions['.ts'] = (mod, filename) =>
     }).outputText,
     filename,
   );
-const { queryClient } = require('../src/query/client.ts');
+const { queryClient } = require('../src/query/cliente.ts');
 const { queries, keys } = require('../src/query/sitmas.ts');
-const { useSessionStore } = require('../src/state/session-store.ts');
+const { useSesion } = require('../src/state/sesion.ts');
 const { sitmasApi } = require('../src/services/sitmas-api.ts');
 queryClient.setDefaultOptions({
   queries: { ...queryClient.getDefaultOptions().queries, gcTime: Infinity },
@@ -112,7 +112,7 @@ test('finalizar sugiere odómetro entero hacia arriba y conserva un cierre ya co
       './route-board/CircuitMap': { __esModule: true, default: 'Map' },
       './route-board/BoardUI': { Action: 'Action', BoardModal: 'Modal', ui: {} },
       '../query/sitmas': { keys: {}, queries: {}, useSitmasQuery: () => ({}), useSitmasMutation: () => ({}) },
-      '../state/session-store': { useSessionStore: selector => selector({ session }) },
+      '../state/sesion': { useSesion: selector => selector({ session }) },
       '../services/spontaneous-stop': {},
     };
     new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? require(name), module, module.exports);
@@ -207,7 +207,7 @@ afterEach(() => {
   require('../src/services/sitmas-api.ts').setSessionToken();
   require('../src/state/trip-records.ts').resetTripMemory();
   queryClient.clear();
-  useSessionStore.setState({ session: null });
+  useSesion.setState({ session: null });
   global.fetch = originalFetch;
 });
 
@@ -268,7 +268,7 @@ test('invalidar hojas alcanza las tareas de ambas hojas y no invalida los catál
 });
 
 test('salir cancela peticiones y limpia los datos del usuario anterior', async () => {
-  useSessionStore
+  useSesion
     .getState()
     .signIn({ idUsuario: 1, nombre: 'Prueba', rol: 'Prueba' });
   let receivedSignal;
@@ -281,12 +281,12 @@ test('salir cancela peticiones y limpia los datos del usuario anterior', async (
     });
   const request = queryClient.fetchQuery(queries.vehiculos).catch(() => null);
   queryClient.setQueryData(keys.marcas, [{ Id: 123 }]);
-  useSessionStore.getState().signOut();
+  useSesion.getState().signOut();
   await request;
   assert.equal(receivedSignal.aborted, true);
-  assert.equal(useSessionStore.getState().session, null);
+  assert.equal(useSesion.getState().session, null);
   assert.equal(queryClient.getQueryCache().getAll().length, 0);
-  useSessionStore
+  useSesion
     .getState()
     .signIn({ idUsuario: 11, nombre: 'Mauro Gerosa', rol: 'Operador_Logistica' });
   assert.equal(queryClient.getQueryData(keys.marcas), undefined);
@@ -328,16 +328,16 @@ test('acceso móvil admite solo las cuentas verificadas de Juan y Mauro', async 
     const session = { idUsuario, nombre: idUsuario === 1 ? 'Juan Videla' : 'Mauro Gerosa', rol: idUsuario === 1 ? 'Administrador' : 'Operador_Logistica', token: 'prueba' };
     global.fetch = async () => Response.json(session);
     assert.deepEqual(await sitmasApi.login('cuenta', 'clave'), session);
-    useSessionStore.getState().signIn(session);
-    assert.deepEqual(useSessionStore.getState().session, session);
-    useSessionStore.getState().signOut();
+    useSesion.getState().signIn(session);
+    assert.deepEqual(useSesion.getState().session, session);
+    useSesion.getState().signOut();
   }
   for (const idUsuario of [2, 8, 12]) {
     const session = { idUsuario, nombre: 'Juan Videla', rol: 'Administrador', token: 'no-admitido' };
     global.fetch = async () => Response.json(session);
     await assert.rejects(sitmasApi.login('otra-cuenta', 'clave'), denied);
-    assert.throws(() => useSessionStore.getState().signIn(session), denied);
-    assert.equal(useSessionStore.getState().session, null);
+    assert.throws(() => useSesion.getState().signIn(session), denied);
+    assert.equal(useSesion.getState().session, null);
   }
   global.fetch = async (_, init) => { assert.equal(init.headers.Authorization, undefined); return Response.json([]); };
   await sitmasApi.rutasHoy();
@@ -379,7 +379,7 @@ test('login muestra el rechazo debajo de Ingresar y no abre una sesión', async 
     react: { ...React, useEffect: () => {}, useRef: value => ({ current: value }), useState: initial => { const key = index++; return [values[key] ?? initial, value => { values[key] = value; }]; } },
     'react-native': { View: 'View', Pressable: 'Pressable', Image: 'Image', StyleSheet: { create: value => value }, useWindowDimensions: () => ({ width: 400 }), Animated: { View: 'AnimatedView', Value: class { interpolate() { return 0; } } } },
     '../components/AppText': { Text: 'Text', TextInput: 'Input' },
-    '../state/session-store': { useSessionStore: selector => selector({ session: null, signIn: () => { signedIn = true; } }) },
+    '../state/sesion': { useSesion: selector => selector({ session: null, signIn: () => { signedIn = true; } }) },
     '../query/sitmas': { useSitmasMutation: () => ({ isPending: false, run: async () => { throw denied; } }) },
     '../services/sitmas-api': require('../src/services/sitmas-api.ts'),
     '../services/mobile-access': require('../src/services/mobile-access.ts'),
@@ -703,10 +703,10 @@ test('sesión envía Bearer en consultas y lo limpia al salir; login no envía t
     return new Response(JSON.stringify(String(url).endsWith('Login')
       ? { idUsuario: 11, nombre: 'Mauro Gerosa', rol: 'Operador-Logistica', token: 'nuevo' } : []));
   };
-  useSessionStore.getState().signIn({ idUsuario: 11, nombre: 'Mauro Gerosa', rol: 'Operador-Logistica', token: 'prueba' });
+  useSesion.getState().signIn({ idUsuario: 11, nombre: 'Mauro Gerosa', rol: 'Operador-Logistica', token: 'prueba' });
   await sitmasApi.rutasHoy();
   await sitmasApi.login('prueba', 'prueba');
-  useSessionStore.getState().signOut();
+  useSesion.getState().signOut();
   await sitmasApi.rutasHoy();
   assert.deepEqual(headers, ['Bearer prueba', undefined, undefined]);
 });
@@ -743,6 +743,7 @@ test('foto de odómetro pide permiso, espera la cámara, permite reintentar y us
     react: { ...React, useState: initial => { const i = stateIndex++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = value; }]; }, useRef: initial => refs[refIndex++] ?? (refs[refIndex - 1] = { current: initial }) },
     'react-native': { View: 'View', Image: 'Image', Platform: { OS: 'android' }, Linking: { openSettings: async () => { settings++; } } },
     'expo-camera': { CameraView: 'CameraView', useCameraPermissions: () => [permission, async () => { requested++; return permission; }] },
+    './NivelCamara': { default: 'NivelCamara', __esModule: true },
     './AppText': { Text: 'Text' }, './route-board/BoardUI': { Action: 'Action', ui: {} },
   };
   new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? require(name), module, module.exports);
@@ -798,7 +799,7 @@ test('formulario del chofer exige kilómetros y foto y bloquea confirmar durante
     './AppText': { Text: 'Text', TextInput: 'Input' }, './FotoOdometro': { default: 'FotoOdometro', __esModule: true },
     './route-board/BoardUI': { Action: 'Action', BoardModal: 'BoardModal', ui: {} },
     '../query/sitmas': { keys: {}, queries: { odometrosVehiculo: () => [] }, useSitmasQuery: () => ({ isSuccess: true, data: [] }), useSitmasMutation: () => ({ isPending: false, run: async () => { writes++; } }) },
-    '../state/session-store': { useSessionStore: selector => selector({ session: { idUsuario: 11 } }) },
+    '../state/sesion': { useSesion: selector => selector({ session: { idUsuario: 11 } }) },
     '../services/driver-routes': { ownRoutes: () => [], routeDate: () => '2026-10-30' },
     '@tanstack/react-query': { useIsMutating: () => 0, useQuery: () => ({}), useQueryClient: () => ({}) },
   };
@@ -1076,9 +1077,9 @@ test('cierre administrativo vuelve a rutas, muestra aviso y no lo repite', () =>
     './AppText': { Text: 'Text', TextInput: 'Input' },
     './route-board/BoardUI': { Action: 'Action', BoardModal: 'BoardModal', ui: {} },
     '../query/sitmas': { keys: { hojas: ['hojasRuta'] }, queries: { odometrosVehiculo: () => [] }, useSitmasQuery: () => ({ isSuccess: true, data: [] }), useSitmasMutation: () => ({ isPending: false }) },
-    '../state/session-store': { useSessionStore: selector => selector({ session: { idUsuario: 11 } }) },
+    '../state/sesion': { useSesion: selector => selector({ session: { idUsuario: 11 } }) },
     '../services/driver-routes': { ownRoutes: () => [] },
-    '../services/trip-notifications': { notifyTripClosed: async () => {}, lastTripAlert: () => seen, markTripAlert: (_user, id) => { seen = id; } },
+    '../services/notificaciones-viaje': { notificarFinViaje: async () => {}, ultimoAvisoViaje: () => seen, marcarAvisoViaje: (_user, id) => { seen = id; } },
     '@tanstack/react-query': { useIsMutating: () => 0, useQuery: () => ({ data: [{ id: 'event-82', routeId: 82 }], refetch: () => {} }), useQueryClient: () => ({ invalidateQueries: () => { invalidated++; } }) },
   };
   new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? (name.startsWith('.') ? {} : require(name)), module, module.exports);
@@ -1092,7 +1093,7 @@ test('cierre administrativo vuelve a rutas, muestra aviso y no lo repite', () =>
 });
 
 test('notificaciones locales piden permiso y notifican sin Firebase ni token push', async () => {
-  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/services/trip-notifications.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
+  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/services/notificaciones-viaje.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
   const calls = [];
   let granted = false;
   const module = { exports: {} };
@@ -1108,12 +1109,62 @@ test('notificaciones locales piden permiso y notifican sin Firebase ni token pus
     },
   };
   new Function('require', 'module', 'exports', compiled)(name => stubs[name], module, module.exports);
-  assert.equal(await module.exports.notificationPermission(true), false);
+  assert.equal(await module.exports.permisoNotificaciones(true), false);
   assert.deepEqual(calls, ['channel', 'permission']);
   granted = true;
-  assert.equal(await module.exports.notificationPermission(), true);
-  await module.exports.notifyTripClosed(82, 'event-82');
+  assert.equal(await module.exports.permisoNotificaciones(), true);
+  await module.exports.notificarFinViaje(82, 'event-82');
   assert.equal(calls.at(-1).identifier, 'event-82');
   assert.match(calls.at(-1).content.body, /ruta #82 fue finalizada por un administrador/);
   assert.deepEqual(calls.at(-1).trigger, { channelId: 'viajes' });
+});
+
+test('inclinación de cámara distingue nivel, inclinación y lecturas sin referencia fiable', () => {
+  const { medirInclinacion } = require('../src/services/inclinacion-camara.ts');
+  assert.equal(medirInclinacion({ x: 0, y: 1, z: 0 }), 0);
+  assert.equal(medirInclinacion({ x: 0, y: -1, z: 0 }), 0);
+  assert.equal(medirInclinacion({ x: 0.5, y: Math.sqrt(0.75), z: 0 }), 30);
+  assert.equal(medirInclinacion({ x: -0.5, y: -Math.sqrt(0.75), z: 0 }), -30);
+  assert.equal(medirInclinacion({ x: 0, y: 0, z: 1 }), null, 'teléfono acostado');
+  assert.equal(medirInclinacion({ x: 2, y: 0, z: 0 }), null, 'movimiento fuerte');
+  assert.equal(medirInclinacion({ x: NaN, y: 1, z: 0 }), null);
+});
+
+test('nivel de cámara apaga el sensor al cerrar o minimizar y descarta inicios tardíos', async () => {
+  const React = require('react');
+  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/components/NivelCamara.tsx'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  let effect, lectura, cambio, disponible = true, muestra, retiros = 0, escuchas = 0, permisos = 0;
+  let esperarDisponibilidad = null;
+  const appState = { currentState: 'active', addEventListener: (_name, callback) => { cambio = callback; return { remove: () => { cambio = null; } }; } };
+  const stubs = {
+    react: { ...React, useEffect: fn => { effect = fn; }, useState: initial => { lectura = initial; return [lectura, value => { lectura = value; }]; } },
+    'react-native': { AppState: appState, Platform: { OS: 'android' }, View: 'View', StyleSheet: { create: value => value } },
+    'expo-sensors': { Accelerometer: {
+      isAvailableAsync: () => esperarDisponibilidad ?? Promise.resolve(disponible),
+      getPermissionsAsync: async () => { permisos++; return { granted: true }; },
+      setUpdateInterval: ms => assert.equal(ms, 100),
+      addListener: callback => { escuchas++; muestra = callback; return { remove: () => { retiros++; } }; },
+    } },
+    '../services/inclinacion-camara': require('../src/services/inclinacion-camara.ts'),
+    './AppText': { Text: 'Text' },
+  };
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? require(name), module, module.exports);
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  module.exports.default({ activo: false }); effect(); await tick();
+  assert.equal(escuchas, 0);
+  module.exports.default({ activo: true }); let limpiar = effect(); await tick();
+  assert.equal(escuchas, 1);
+  muestra({ x: 0, y: 1, z: 0 }); assert.equal(lectura.grados, 0);
+  appState.currentState = 'background'; cambio('background'); assert.equal(retiros, 1);
+  muestra({ x: 1, y: 0, z: 0 }); assert.equal(lectura.grados, 0, 'no procesar lecturas tras minimizar');
+  appState.currentState = 'active'; cambio('active'); await tick(); assert.equal(escuchas, 2);
+  limpiar(); assert.equal(retiros, 2); assert.equal(cambio, null);
+  let resolver;
+  esperarDisponibilidad = new Promise(resolve => { resolver = resolve; });
+  module.exports.default({ activo: true }); limpiar = effect(); limpiar(); resolver(true); await tick();
+  assert.equal(escuchas, 2); assert.equal(permisos, 2, 'no pedir permisos si ya se cerró la cámara');
+  esperarDisponibilidad = null; disponible = false;
+  module.exports.default({ activo: true }); limpiar = effect(); await tick();
+  assert.match(lectura.aviso, /no disponible.*Podés tomar la foto/); assert.equal(escuchas, 2); limpiar();
 });

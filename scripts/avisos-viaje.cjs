@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-function createTripAlerts(file) {
+function crearAvisosViaje(file) {
   let memory = [];
   const read = () => file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : memory;
   return {
@@ -24,4 +24,4 @@ function createTripAlerts(file) {
     },
   };
 }
-module.exports = { createTripAlerts };
+module.exports = { crearAvisosViaje };

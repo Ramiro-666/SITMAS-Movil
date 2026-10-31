@@ -110,18 +110,18 @@ test('finalización forzada: solo administrador validado, viaje en curso y cierr
 test('avisos persistentes: puentes comparten estado y cada chofer ve solo sus cierres', t => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const { createTripAlerts } = require('./trip-alerts.cjs');
+  const { crearAvisosViaje } = require('./avisos-viaje.cjs');
   const root = path.join(__dirname, '../.local');
   fs.mkdirSync(root, { recursive: true });
   const folder = fs.mkdtempSync(path.join(root, 'test-alerts-'));
   t.after(() => fs.rmSync(folder, { recursive: true }));
   const file = path.join(folder, 'alerts.json');
-  const adminBridge = createTripAlerts(file);
-  const driverBridge = createTripAlerts(file);
+  const adminBridge = crearAvisosViaje(file);
+  const driverBridge = crearAvisosViaje(file);
   adminBridge.closed(11, 82);
   assert.equal(driverBridge.events(11).length, 1);
   assert.equal(driverBridge.events(1).length, 0);
-  createTripAlerts(file).closed(11, 83);
+  crearAvisosViaje(file).closed(11, 83);
   assert.equal(driverBridge.events(11).length, 2);
   adminBridge.closed(11, 83);
   assert.equal(driverBridge.events(11).length, 2);

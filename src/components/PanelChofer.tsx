@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sitmasApi } from '../services/sitmas-api';
-import { lastTripAlert, markTripAlert, notifyTripClosed } from '../services/trip-notifications';
+import { ultimoAvisoViaje, marcarAvisoViaje, notificarFinViaje } from '../services/notificaciones-viaje';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './AppText';
 import { Action, BoardModal, ui } from './route-board/BoardUI';
 import { acceptDriverTrip, TripWriteError } from '../services/accept-driver-trip';
 
 import { keys, queries, useSitmasQuery, useSitmasMutation } from '../query/sitmas';
-import { useSessionStore } from '../state/session-store';
+import { useSesion } from '../state/sesion';
 import { ownRoutes, routeDate } from '../services/driver-routes';
 import type { HojaRuta } from '../services/sitmas-api';
 import QueryStatus from './QueryStatus';
@@ -46,15 +46,15 @@ export default function PanelChofer() {
   const [adminNotice, setAdminNotice] = useState('');
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy');
   const [selected, setSelected] = useState<HojaRuta | null>(null);
-  const session = useSessionStore((state) => state.session)!;
+  const session = useSesion((state) => state.session)!;
   const alerts = useQuery({ queryKey: ['tripAlerts', session.idUsuario], queryFn: ({ signal }) => sitmasApi.tripAlerts(signal), refetchInterval: 5000, staleTime: 0 });
   const latestAlert = alerts.data?.at(-1);
   useEffect(() => {
-    if (!latestAlert || lastTripAlert(session.idUsuario) === latestAlert.id) return;
+    if (!latestAlert || ultimoAvisoViaje(session.idUsuario) === latestAlert.id) return;
     setSelected(null); setTab('hoy'); setAccepting(null);
     setAdminNotice(`La ruta #${latestAlert.routeId} fue finalizada por un administrador.`);
-    markTripAlert(session.idUsuario, latestAlert.id);
-    void notifyTripClosed(latestAlert.routeId, latestAlert.id).catch(() => setAdminNotice(`La ruta #${latestAlert.routeId} fue finalizada por un administrador. No se pudo mostrar la notificación del teléfono.`));
+    marcarAvisoViaje(session.idUsuario, latestAlert.id);
+    void notificarFinViaje(latestAlert.routeId, latestAlert.id).catch(() => setAdminNotice(`La ruta #${latestAlert.routeId} fue finalizada por un administrador. No se pudo mostrar la notificación del teléfono.`));
     void client.invalidateQueries({ queryKey: keys.hojas });
   }, [latestAlert?.id, session.idUsuario, client]);
   const [accepting, setAccepting] = useState<HojaRuta | null>(null);

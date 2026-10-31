@@ -13,11 +13,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { focusManager, QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from '../query/client';
+import { queryClient } from '../query/cliente';
 import { initializeTripStorage } from '../state/trip-storage';
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 import LocationGate from '../components/LocationGate';
-import NotificationGate from '../components/NotificationGate';
+import PermisoNotificaciones from '../components/PermisoNotificaciones';
 
 initializeTripStorage();
 
@@ -50,7 +50,7 @@ export default function RootLayout() {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     <SafeAreaView style={{ flex: 1, backgroundColor: '#0054a6' }}>
     <QueryClientProvider client={queryClient}>
-      <NotificationGate><LocationGate><Stack screenOptions={{ headerShown: false }} /></LocationGate></NotificationGate>
+      <PermisoNotificaciones><LocationGate><Stack screenOptions={{ headerShown: false }} /></LocationGate></PermisoNotificaciones>
       <StatusBar style="light" />
     </QueryClientProvider>
     </SafeAreaView>

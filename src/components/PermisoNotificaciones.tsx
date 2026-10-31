@@ -1,13 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AppState, Linking, View } from 'react-native';
-import { useSessionStore } from '../state/session-store';
+import { useSesion } from '../state/sesion';
 import { isDriverRole } from '../services/driver-routes';
-import { notificationPermission } from '../services/trip-notifications';
+import { permisoNotificaciones } from '../services/notificaciones-viaje';
 import { Text } from './AppText';
 import { Action, ui } from './route-board/BoardUI';
 
-export default function NotificationGate({ children }: { children: ReactNode }) {
-  const session = useSessionStore(state => state.session);
+export default function PermisoNotificaciones({ children }: { children: ReactNode }) {
+  const session = useSesion(state => state.session);
   const driver = !!session && isDriverRole(session.rol);
   const [granted, setGranted] = useState(false);
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ export default function NotificationGate({ children }: { children: ReactNode }) 
     let disposed = false;
     async function check(request = false) {
       try {
-        const allowed = await notificationPermission(request);
+        const allowed = await permisoNotificaciones(request);
         if (disposed) return;
         setGranted(allowed);
         setError('');
@@ -34,11 +34,11 @@ export default function NotificationGate({ children }: { children: ReactNode }) 
     {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
     <Action title={busy ? 'Comprobando…' : granted ? 'Reintentar' : 'Permitir notificaciones'} disabled={busy} onPress={() => {
       setBusy(true);
-      void notificationPermission(true).then(async allowed => {
+      void permisoNotificaciones(true).then(async allowed => {
         setGranted(allowed);
         if (allowed) setError(''); else await Linking.openSettings();
       }).catch(() => setError('No se pudieron habilitar las notificaciones. Revisá los permisos.')).finally(() => setBusy(false));
     }} />
-    <Action title="Cerrar sesión" secondary onPress={() => useSessionStore.getState().signOut()} />
+    <Action title="Cerrar sesión" secondary onPress={() => useSesion.getState().signOut()} />
   </View>;
 }

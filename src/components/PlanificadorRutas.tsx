@@ -12,8 +12,8 @@ import { assignPendingTask, deleteTask } from '../services/assign-task';
 import { currentTaskCoordinates } from '../services/optimized-circuit';
 import { validCoordinates } from './maps/types';
 import { validPlannedDate } from '../services/pending-alert';
-import { useRouteBoardStore } from '../state/route-board-store';
-import { useSessionStore } from '../state/session-store';
+import { useTableroRutas } from '../state/tablero-rutas';
+import { useSesion } from '../state/sesion';
 
 const emptyTask = { Id_TipoMovimiento: 0, Id_RecursoMov: 0, Id_Origen: 0, Id_TipoMaterial: 0 };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -57,7 +57,7 @@ function RouteCard({ route, origins, busy, onAssign, onMap, onSelect, onDelete }
 }
 export default function PlanificadorRutas({ header, footer }: { header: React.ReactElement; footer: React.ReactElement }) {
   const client = useQueryClient();
-  const administrator = useSessionStore((state) => state.session?.rol.split(',').some((role) => role.trim().toLowerCase() === 'administrador') ?? false);
+  const administrator = useSesion((state) => state.session?.rol.split(',').some((role) => role.trim().toLowerCase() === 'administrador') ?? false);
   const [confirmFinish, setConfirmFinish] = useState<number | null>(null);
   const { width } = useWindowDimensions();
   const wide = width >= 850;
@@ -74,8 +74,8 @@ export default function PlanificadorRutas({ header, footer }: { header: React.Re
   const origins = originsQuery.data ?? [];
   const pending = currentTaskCoordinates(pendingQuery.data ?? [], origins);
   // Zustand comparte solo selección y arrastre entre tarjetas, mapa y tablero.
-  const board = useRouteBoardStore();
-  useEffect(() => () => useRouteBoardStore.getState().reset(), []);
+  const board = useTableroRutas();
+  useEffect(() => () => useTableroRutas.getState().reset(), []);
   const [form, setForm] = useState<'task' | 'route' | null>(null);
   const [draft, setDraft] = useState(emptyTask);
   const [routeDraft, setRouteDraft] = useState({ date: today(), vehicle: 0 });

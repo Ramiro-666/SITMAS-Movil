@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useRouteBoardStore } from '../../state/route-board-store';
+import { useTableroRutas } from '../../state/tablero-rutas';
 
 type Zone = { element: HTMLDivElement; disabled: boolean; onDrop: (id: number) => void };
 const Zones = createContext<Map<number, Zone> | null>(null);
@@ -43,11 +43,11 @@ export function TaskDrag({ taskId, disabled, children }: { taskId: number; disab
   };
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   // getState permite ejecutar acciones de Zustand desde eventos del puntero.
-  const clear = () => { stopScroll(); gesture.current = null; setOffset({ x: 0, y: 0 }); useRouteBoardStore.getState().drag(null); };
+  const clear = () => { stopScroll(); gesture.current = null; setOffset({ x: 0, y: 0 }); useTableroRutas.getState().drag(null); };
   useEffect(() => {
     const cancel = () => clear();
     window.addEventListener('blur', cancel);
-    return () => { window.removeEventListener('blur', cancel); stopScroll(); gesture.current = null; useRouteBoardStore.getState().drag(null); };
+    return () => { window.removeEventListener('blur', cancel); stopScroll(); gesture.current = null; useTableroRutas.getState().drag(null); };
   }, []);
   useEffect(() => { if (disabled) clear(); }, [disabled]);
   return <div aria-label={`Arrastrar tarea ${taskId}`} style={{ cursor: disabled ? 'default' : 'grab', touchAction: 'none', userSelect: 'none', position: 'relative', zIndex: gesture.current?.active ? 100 : 0, transform: `translate(${offset.x}px, ${offset.y}px)`, opacity: gesture.current?.active ? 0.85 : 1 }}
@@ -62,7 +62,7 @@ export function TaskDrag({ taskId, disabled, children }: { taskId: number; disab
       if (!g) return;
       g.pointerX = event.clientX; g.pointerY = event.clientY;
       const x = event.clientX - g.x, y = event.clientY - g.y;
-      if (!g.active && Math.hypot(x, y) > 8) { g.active = true; useRouteBoardStore.getState().drag(taskId); }
+      if (!g.active && Math.hypot(x, y) > 8) { g.active = true; useTableroRutas.getState().drag(taskId); }
       if (g.active) { event.preventDefault(); followPointer(); startScroll(); }
     }}
     onPointerUp={(event) => {
@@ -79,6 +79,6 @@ export function TaskDrag({ taskId, disabled, children }: { taskId: number; disab
 export function DropTarget({ routeId, disabled, onDrop, children }: { routeId: number; disabled: boolean; onDrop: (id: number) => void; children: ReactNode }) {
   const zones = useContext(Zones);
   // El selector suscribe cada destino solo al ID arrastrado para destacar su borde.
-  const dragging = useRouteBoardStore((s) => s.draggingId);
+  const dragging = useTableroRutas((s) => s.draggingId);
   return <div ref={(element) => { if (element) zones?.set(routeId, { element, disabled, onDrop }); else zones?.delete(routeId); }} aria-label={`Asignar tareas a hoja ${routeId}`} style={{ borderRadius: 14, outline: dragging !== null && !disabled ? '2px dashed #13855b' : 'none' }}>{children}</div>;
 }

@@ -15,7 +15,7 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.sitmas.movil",
-      "versionCode": 4,
+      "versionCode": 5,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -25,6 +25,12 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "SITMAS usa el movimiento del teléfono para ayudarte a nivelar la foto del odómetro."
+        }
+      ],
       [
         "expo-camera",
         {

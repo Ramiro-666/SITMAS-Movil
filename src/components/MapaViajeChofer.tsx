@@ -9,13 +9,13 @@ import SelectField from './SelectField';
 import CircuitMap from './route-board/CircuitMap';
 import { Action, BoardModal, ui } from './route-board/BoardUI';
 import { keys, queries, useSitmasMutation, useSitmasQuery } from '../query/sitmas';
-import { useSessionStore } from '../state/session-store';
+import { useSesion } from '../state/sesion';
 import { saveSpontaneousStop, StopWriteError } from '../services/spontaneous-stop';
 import type { CatalogItem, HojaRuta } from '../services/sitmas-api';
 import type { Coordinate } from '../services/route-geometry';
 
 export default function MapaViajeChofer({ route, origins }: { route: HojaRuta; origins: CatalogItem[] }) {
-  const session = useSessionStore((state) => state.session)!;
+  const session = useSesion((state) => state.session)!;
   const writing = useIsMutating() > 0;
   const [finishing, setFinishing] = useState(false);
   const [finalValue, setFinalValue] = useState('');

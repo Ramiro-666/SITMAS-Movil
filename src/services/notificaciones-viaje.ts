@@ -3,14 +3,14 @@ import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
-export async function notificationPermission(request = false) {
+export async function permisoNotificaciones(request = false) {
   if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('viajes', { name: 'Estado de los viajes', importance: Notifications.AndroidImportance.HIGH });
   const current = await Notifications.getPermissionsAsync();
   const permission = request && !current.granted && current.canAskAgain ? await Notifications.requestPermissionsAsync() : current;
   return permission.granted;
 }
-export async function notifyTripClosed(routeId: number, eventId: string) {
-  if (!await notificationPermission()) return;
+export async function notificarFinViaje(routeId: number, eventId: string) {
+  if (!await permisoNotificaciones()) return;
   await Notifications.scheduleNotificationAsync({
     identifier: eventId,
     content: { title: 'SITMAS · viaje finalizado', body: `La ruta #${routeId} fue finalizada por un administrador.`, sound: 'default', data: { routeId } },
@@ -18,5 +18,5 @@ export async function notifyTripClosed(routeId: number, eventId: string) {
   });
 }
 const seenFile = (userId: number) => new File(Paths.document, `sitmas-trip-alert-${userId}.txt`);
-export function lastTripAlert(userId: number) { const file = seenFile(userId); return file.exists ? file.textSync() : null; }
-export function markTripAlert(userId: number, id: string) { const file = seenFile(userId); if (!file.exists) file.create(); file.write(id); }
+export function ultimoAvisoViaje(userId: number) { const file = seenFile(userId); return file.exists ? file.textSync() : null; }
+export function marcarAvisoViaje(userId: number, id: string) { const file = seenFile(userId); if (!file.exists) file.create(); file.write(id); }

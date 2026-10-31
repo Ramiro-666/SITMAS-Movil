@@ -36,7 +36,7 @@ Con `npm start`, la app se abre en **http://localhost:8081/**. Este comando inic
 
 Para el piloto Android en la misma Wi-Fi, usar `npm run api:lan` en lugar del puente local y comprobarlo con `npm run api:lan:check`. La APK utiliza `https://192.168.100.2:8443/api`; la API y el puente deben permanecer encendidos.
 
-## Funcionalidades
+## Features
 
 | Funcionalidad | Estado |
 | --- | --- |
@@ -71,14 +71,15 @@ Para el piloto Android en la misma Wi-Fi, usar `npm run api:lan` en lugar del pu
 | Recorrido vial optimizado, kilómetros y orden de visita para el chofer | Implementado |
 | Parada espontánea con ubicación GPS y recálculo del circuito | Implementado |
 | Cierre del viaje con retorno a EMEC, odómetro final e historial | Implementado |
-| Generación e instalación de una APK de prueba en Android | Completado · versionCode 3 |
+| Generación e instalación de una APK de prueba en Android | APK v5; funcionamiento inicial confirmado por el usuario · 31/10/2026 |
 | Permiso GPS, posición actual y servicio de ubicación durante viajes | Implementado en Android |
 | Áreas seguras para barras del sistema e ícono GPS Bio | Implementado y probado en el piloto |
-| Finalización administrativa desde Detalles y resaltado de viajes en curso | Implementado; pendiente de prueba física |
+| Finalización remota de viajes desde el perfil de administrador, con confirmación en Detalles y resaltado de viajes en curso | Incluido en APK v5; pendiente de validación específica |
 | Regreso automático del chofer y aviso de cierre administrativo | Implementado; actualización cada 5 segundos con la app activa |
-| Notificación local y permiso obligatorio para el chofer | Implementado; requiere nueva APK y prueba física |
-| Prueba de la APK con servidor y base de datos en la nube | Próxima feature · pendiente de la publicación oficial del servidor |
-| Kilómetros iniciales y foto obligatoria del odómetro con Expo Camera (`expo-camera`), solicitud de permiso, revisión de la captura y URI temporal local | Implementado en rama de pruebas; falta prueba física y nueva APK |
+| Notificación local y permiso obligatorio para el chofer | Incluido en APK v5; pendiente de validación específica |
+| Prueba de la APK con servidor y base de datos en la nube | Próxima mejora · pendiente de la publicación oficial del servidor |
+| Kilómetros iniciales y foto obligatoria del odómetro con Expo Camera, solicitud de permiso, revisión de la captura y URI temporal local | Incluido en APK v5 |
+| Guía de inclinación lateral para fotografiar el odómetro con el acelerómetro (`expo-sensors`), indicador de grados y referencia de ±5° | Implementado en APK v5; prueba inicial de la APK confirmada · 31/10/2026 |
 
 ## Acceso y configuración
 
@@ -124,6 +125,8 @@ El rol `Operador_Logistica` abre los viajes disponibles del día o el viaje prop
 
 **Aceptar viaje** requiere kilómetros iniciales y foto del odómetro. La cámara solicita permiso, permite revisar y repetir la captura y ofrece abrir ajustes si está bloqueada. No pide micrófono ni galería. Solo se guarda la URI temporal local por usuario y ruta: no hay espacio definido en la base para archivar fotos. El sistema puede limpiar el archivo y la referencia se retira al finalizar. Los viajes anteriores sin foto pueden cerrarse. No se comparan automáticamente los dígitos de la imagen con los kilómetros ingresados.
 
+La cámara incluye una guía aproximada de inclinación lateral mediante el acelerómetro (`expo-sensors`). Muestra los grados y cambia a verde dentro de ±5°. Solo escucha el sensor mientras la cámara está lista y la app está en primer plano; se detiene al capturar, cancelar o salir. Si falta el sensor o su permiso, la foto sigue disponible. Con el teléfono acostado o en movimiento fuerte pide corregir la posición. La guía no mide nitidez ni verifica los dígitos de la imagen. Está incluida en la APK v5; queda pendiente la comprobación detallada de inclinación, permisos y comportamiento en distintos teléfonos.
+
 **Parada espontánea** permite indicar una referencia, usar GPS o marcar coordenadas en el mapa, elegir movimiento y material opcional. Se agrega al viaje activo y recalcula el circuito.
 
 **Finalizar viaje** confirma el regreso a EMEC y el odómetro real. La sugerencia redondea hacia arriba: 69.623 km iniciales más 52,67 km estimados sugieren 69.676 km. Se valida que el final no sea menor al inicio ni exceda 180 km de recorrido. Luego se registra el retorno, se cierra el odómetro y se finaliza la hoja.
@@ -144,21 +147,21 @@ Requiere reinstalar una APK compilada con `expo-notifications`; la APK anterior 
 
 La integración actual utiliza `GET /api/TP_Material`, `SubtipoMaterial` y los métodos POST, PUT y DELETE de `/api/Vehiculo`. Las tareas pendientes no tienen `FechaPrevista`: la fecha pertenece a la hoja asignada. Inicio muestra todas las tareas sin asignar.
 
-La consulta de odómetros se hace al seleccionar un vehículo. En la verificación del 30/10/2026 respondieron AE 669 QS, AE 752 TM y AE 669 QV; el vehículo sin especificar no tenía registros. **AE 669 QT devuelve HTTP 500 por conversión de `DBNull` en la API original**. La pantalla informa el fallo y permite consultar otro vehículo; no reemplaza lecturas faltantes por cero.
 
 ## APK y pruebas físicas
 
-La **APK 1.0.0, versionCode 4**, compilada el 28/10/2026, incluye la compatibilidad con la API actual y el acceso de Juan y Mauro. Mantiene la firma para actualizar la instalación anterior. Su instalación sigue pendiente de confirmación y **no incluye la foto del odómetro ni los cambios posteriores**; requieren una nueva compilación.
+La **APK 1.0.0, versionCode 5**, compilada el 31/10/2026, incorpora la fotografía del odómetro con guía de inclinación lateral, el cierre administrativo de viajes y los avisos locales. Conserva la firma y el acceso HTTPS del piloto LAN. El usuario confirmó su funcionamiento inicial el 31/10/2026. Esta confirmación no sustituye la validación detallada de cámara, acelerómetro, cierre administrativo y notificaciones.
 
-[Descargar APK v4](https://expo.dev/artifacts/eas/iw6DnH51t58-ux-bnIVlTIwqDq1ynHW-323VjQyeGko.apk) · [Compilación v4](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/2086417b-47e3-4a78-882c-24e65a9ae04d)
+[Descargar APK v5](https://expo.dev/artifacts/eas/CTS84_CQ80GVxnQhvAplwFqQNBh-1yj5Ig1qPP_i1oM.apk) · [Compilación v5](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/ecf54d4b-5923-4516-b340-fe51655eeb6c)
 
-El enlace interno vence el 11/11/2026 y el certificado LAN el 17/11/2026.
+La APK anterior, **1.0.0, versionCode 4**, compilada el 28/10/2026, incluye la compatibilidad con la API actual y el acceso de Juan y Mauro. Mantiene la firma para actualizar la instalación anterior. **No incluye la foto del odómetro ni los cambios posteriores**; esas funciones están incorporadas en la APK v5.
 
-El usuario confirmó el piloto **versionCode 3** el 20/10/2026: administrador, chofer, rutas, mapas y paradas espontáneas. Incluye marcadores renumerados al reordenar, redondeo del odómetro y notificación Bio. [Compilación v3](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/cd531108-e189-4318-94ab-958510e9f5a4).
+
+El usuario confirmó el piloto **versionCode 3** el 20/10/2026: administrador, chofer, rutas, mapas y paradas espontáneas. Incluye marcadores renumerados al reordenar, redondeo del odómetro y notificación Bio.
 
 `eas.json` contiene `preview` (APK LAN) y `production` (AAB). Android usa `com.sitmas.movil`; Expo usa propietario `sitmas` y slug `sitmas-movil`. El proyecto tiene firma remota y configuración de mapas en `preview`. La misma firma permite actualizar la APK. No requiere publicar en Google Play; EAS gratuito está sujeto a cuota y cola.
 
-Faltan pruebas de cámara física, iOS, autonomía y seguimiento prolongado con pantalla bloqueada. La adaptación web se revisó en formato Pixel 9 (412 × 924).
+Quedan pendientes las pruebas detalladas de cámara y acelerómetro, los permisos rechazados, las notificaciones, el cierre administrativo, iOS, autonomía y seguimiento prolongado con pantalla bloqueada. La adaptación web se revisó en formato Pixel 9 (412 × 924).
 
 ### Próxima prueba: servidor en la nube
 
@@ -172,16 +175,16 @@ npm test
 npm run export:web
 ```
 
-La última ejecución tuvo **64 pruebas aprobadas** y TypeScript sin errores. La suite cubre sesión y acceso, consultas y caché, rutas, coordenadas, asignaciones, viajes, foto, GPS, cierre, permisos y notificaciones locales, finalización administrativa y recuperación ante fallos parciales. Las pruebas automatizadas usan respuestas controladas; no sustituyen las pruebas físicas. Las pruebas reales anteriores emplearon registros temporales; las verificaciones más recientes de odómetros fueron de lectura.
+La última ejecución tuvo **66 pruebas aprobadas** y TypeScript sin errores. La suite cubre sesión y acceso, consultas y caché, rutas, coordenadas, asignaciones, viajes, foto, inclinación de cámara y apagado del sensor, GPS, cierre, permisos y notificaciones locales, finalización administrativa y recuperación ante fallos parciales. Las pruebas automatizadas usan respuestas controladas; no sustituyen las pruebas físicas. Las pruebas reales anteriores emplearon registros temporales; las verificaciones más recientes de odómetros fueron de lectura.
 
 - `src/services/sitmas-api.ts`: cliente y contratos de la API.
-- `src/query/client.ts`: caché y reintentos.
+- `src/query/cliente.ts`: caché y reintentos.
 - `src/query/sitmas.ts`: claves, consultas y mutaciones. Las escrituras invalidan las listas afectadas.
-- `src/state/session-store.ts`: sesión en memoria y limpieza al salir.
-- `src/state/route-board-store.ts`: selección y arrastre del tablero.
+- `src/state/sesion.ts`: sesión en memoria y limpieza al salir.
+- `src/state/tablero-rutas.ts`: selección y arrastre del tablero.
 - `src/components/PlanificadorRutas.tsx`: tablero y finalización administrativa.
-- `src/components/NotificationGate.tsx`: permiso obligatorio de notificaciones para choferes.
-- `src/services/trip-notifications.ts`: notificaciones locales y control de avisos ya mostrados.
-- `scripts/trip-alerts.cjs`: persistencia de cierres administrativos compartida por los puentes.
+- `src/components/PermisoNotificaciones.tsx`: permiso obligatorio de notificaciones para choferes.
+- `src/services/notificaciones-viaje.ts`: notificaciones locales y control de avisos ya mostrados.
+- `scripts/avisos-viaje.cjs`: persistencia de cierres administrativos compartida por los puentes.
 
 Para agregar datos remotos, definir el método en el cliente y su consulta en `query/sitmas.ts`. Usar Zustand para estado compartido de interfaz; las respuestas de la API permanecen en TanStack Query.

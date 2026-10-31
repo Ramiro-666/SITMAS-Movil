@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { sitmasApi } from '../services/sitmas-api';
-import { useSessionStore } from '../state/session-store';
+import { useSesion } from '../state/sesion';
 
 // TanStack: las claves identifican la caché; invalidar hojas también alcanza sus tareas.
 export const keys = {
@@ -78,7 +78,7 @@ export function useSitmasQuery<T>(
   enabled = true,
 ) {
   // Zustand selecciona solo la sesión; sin login, TanStack no consulta la API.
-  const signedIn = useSessionStore((state) => state.session !== null);
+  const signedIn = useSesion((state) => state.session !== null);
   return useQuery({ ...config, enabled: signedIn && enabled });
 }
 

@@ -6,7 +6,7 @@ const { createMobileHandler, createUpstream } = require('./mobile-api.cjs');
 function createDevServer() {
   const ca = fs.readFileSync(path.join(__dirname, '../.local/lan-api/upstream.crt'));
   const server = http.createServer(createMobileHandler({
-    alerts: require('./trip-alerts.cjs').createTripAlerts(process.env.SITMAS_ALERTS_FILE ?? (process.platform === 'win32' ? 'D:/descarga codex/plugin-data/sitmas-movil/trip-alerts.json' : path.join(__dirname, '../.local/trip-alerts.json'))), upstream: createUpstream(ca), hosts: ['localhost', '127.0.0.1'],
+    alerts: require('./avisos-viaje.cjs').crearAvisosViaje(process.env.SITMAS_ALERTS_FILE ?? (process.platform === 'win32' ? 'D:/descarga codex/plugin-data/sitmas-movil/trip-alerts.json' : path.join(__dirname, '../.local/trip-alerts.json'))), upstream: createUpstream(ca), hosts: ['localhost', '127.0.0.1'],
     origins: ['http://localhost:8081', 'http://localhost:8082', 'http://127.0.0.1:8081', 'http://127.0.0.1:8082'],
   }));
   server.requestTimeout = 30000;

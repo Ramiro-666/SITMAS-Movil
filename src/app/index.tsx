@@ -23,7 +23,7 @@ import PlanificadorRutas from '../components/PlanificadorRutas';
 import { ApiError, InvalidSessionError, sitmasApi } from '../services/sitmas-api';
 import { MobileAccessDeniedError } from '../services/mobile-access';
 import { useIsMutating } from '@tanstack/react-query';
-import { useSessionStore } from '../state/session-store';
+import { useSesion } from '../state/sesion';
 import {
   keys,
   queries,
@@ -72,7 +72,7 @@ function Card({
 }
 function Login() {
   // Zustand: seleccionamos la acción de sesión, sin copiar datos de la API.
-  const onLogin = useSessionStore((state) => state.signIn);
+  const onLogin = useSesion((state) => state.signIn);
   // TanStack controla carga/error del login; al confirmar se actualiza Zustand.
   const login = useSitmasMutation(
     ({ usuario, password }: { usuario: string; password: string }) =>
@@ -530,8 +530,8 @@ function Configuracion() {
   );
 }
 function AppShell() {
-  const session = useSessionStore((state) => state.session);
-  const onLogout = useSessionStore((state) => state.signOut);
+  const session = useSesion((state) => state.session);
+  const onLogout = useSesion((state) => state.signOut);
   const writing = useIsMutating() > 0;
   const [section, setSection] = useState<Section>('inicio');
   const [openMenu, setOpenMenu] = useState(false);
@@ -615,7 +615,7 @@ function AppShell() {
 export default function HomeScreen() {
   const { width } = useWindowDimensions();
   // Este selector de Zustand cambia la pantalla al iniciar o cerrar sesión.
-  const signedIn = useSessionStore((state) => state.session !== null);
+  const signedIn = useSesion((state) => state.session !== null);
   return <View style={{ flex: 1, width: width || '100%', maxWidth: '100%', minWidth: 0 }}>
     {signedIn ? <AppShell /> : <Login />}
   </View>;
