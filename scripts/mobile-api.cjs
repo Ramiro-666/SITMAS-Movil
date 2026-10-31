@@ -1,11 +1,12 @@
 const https = require('node:https');
+const { createTripAlerts } = require('./trip-alerts.cjs');
 const denied = 'Su usuario no tiene los permisos necesarios para utilizar SITMAS Móvil, comuníquese con su supervisor.';
 const allowed = id => id === 1 || id === 11;
 const routes = {
-  GET: /^(?:hojaruta(?:\/(?:hoy|\d+))?|detallehojaruta\/(?:pendientes|hojaruta\/\d+)|(?:Vehiculo|Tp_Vehiculo|MarcaVeh|ModeloVeh|EST_HDR)\/ListarTodo|tipomovimientos|recursosmovilizados|origen|TP_Material|MaterialClasificado\/ListarVista|MovimientoSalida\/StockNeto|Dashboard\/(?:PesoBrutoAcumulado|RendimientoClasificacion)|registroodometro)$/i,
+  GET: /^(?:trip-alerts|hojaruta(?:\/(?:hoy|\d+))?|detallehojaruta\/(?:pendientes|hojaruta\/\d+)|(?:Vehiculo|Tp_Vehiculo|MarcaVeh|ModeloVeh|EST_HDR)\/ListarTodo|tipomovimientos|recursosmovilizados|origen|TP_Material|MaterialClasificado\/ListarVista|MovimientoSalida\/StockNeto|Dashboard\/(?:PesoBrutoAcumulado|RendimientoClasificacion)|registroodometro)$/i,
   POST: /^(?:Usuario\/Login|Vehiculo|(?:Tp_Vehiculo\/(?:Insertar|Modificar\/\d+|Borrar\/\d+))|(?:MarcaVeh|ModeloVeh)\/Insertar|hojaruta|detallehojaruta|ubicaciongeografica|registroodometro(?:\/iniciar-ruta)?)$/i,
   PUT: /^(?:Vehiculo\/\d+|(?:MarcaVeh|ModeloVeh)\/Modificar\/\d+|registroodometro\/finalizar-ruta\/\d+)$/i,
-  PATCH: /^(?:hojaruta\/\d+\/(?:distanciatotal|iniciar|finalizar)|detallehojaruta\/\d+\/asignar)$/i,
+  PATCH: /^(?:hojaruta\/\d+\/(?:distanciatotal|iniciar|finalizar|forzar-finalizacion)|detallehojaruta\/\d+\/asignar)$/i,
   DELETE: /^(?:Vehiculo\/\d+|(?:MarcaVeh|ModeloVeh)\/Borrar\/\d+|detallehojaruta\/\d+)$/i,
 };
 
@@ -19,7 +20,7 @@ function claims(token) {
 }
 
 // La firma la valida SITMAS en cada consulta: decodificar el JWT nunca concede acceso.
-function createMobileHandler({ upstream, hosts, origins = [] }) {
+function createMobileHandler({ upstream, hosts, origins = [], alerts = createTripAlerts() }) {
   return async (req, res) => {
     const send = (status, value) => {
       if (!res.destroyed) res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }).end(JSON.stringify(value));
@@ -59,6 +60,30 @@ function createMobileHandler({ upstream, hosts, origins = [] }) {
       if (!login) {
         const status = await verify(token);
         if (status !== 200) { send(status, { Message: status === 403 ? denied : 'Token inválido o expirado.' }); return; }
+      }
+      if (req.method === 'GET' && route === 'trip-alerts') { send(200, alerts.events(Number(claims(token).sub))); return; }
+      const forced = req.method === 'PATCH' && /^hojaruta\/(\d+)\/forzar-finalizacion$/i.exec(route);
+      if (forced) {
+        // La firma del token ya fue validada por SITMAS en verify.
+        const payload = claims(token);
+        const roles = payload.role ?? payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+        if (![roles].flat().some(role => typeof role === 'string' && role.split(',').some(value => value.trim().toLowerCase() === 'administrador'))) {
+          send(403, { Message: 'Solo el administrador puede forzar la finalización.' }); return;
+        }
+        const path = `/api/hojaruta/${forced[1]}`;
+        const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+        const before = await upstream(path, 'GET', headers);
+        if (before.status !== 200) { send(before.status, { Message: 'No se pudo consultar la hoja de ruta.' }); return; }
+        const routeData = JSON.parse(before.body);
+        if (routeData.Id_Estado !== 3) { send(409, { Message: 'El viaje ya no está en curso. Actualizá los datos.' }); return; }
+        const distance = routeData.Distancia_Total_Estimada_Km;
+        if (!Number.isFinite(distance) || distance < 0) { send(409, { Message: 'La hoja no tiene una distancia válida registrada.' }); return; }
+        try { await upstream(`${path}/finalizar`, 'PATCH', headers, Buffer.from(JSON.stringify({ DistanciaTotal: distance }))); }
+        catch { /* Releer confirma un cierre cuya respuesta se perdió. */ }
+        const after = await upstream(path, 'GET', headers);
+        if (after.status !== 200 || JSON.parse(after.body).Id_Estado !== 5) throw new Error('Cierre sin confirmar.');
+        if (Number.isInteger(routeData.Id_Chofer) && routeData.Id_Chofer > 0) alerts.closed(routeData.Id_Chofer, routeData.Id);
+        send(200, { Mensaje: 'Viaje finalizado por el administrador.' }); return;
       }
       const chunks = []; let size = 0;
       for await (const chunk of req) {

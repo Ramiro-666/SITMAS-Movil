@@ -381,12 +381,12 @@ function OdometroPanel({
   footer: React.ReactElement;
 }) {
   const vehiclesQuery = useSitmasQuery(queries.vehiculos);
-  const odometersQuery = useSitmasQuery(queries.odometros);
+  const [idVehiculo, setIdVehiculo] = useState(0);
+  const odometersQuery = useSitmasQuery(queries.odometrosVehiculo(idVehiculo), idVehiculo > 0);
   const vehiculos = vehiclesQuery.data ?? [];
   const odometros = odometersQuery.data ?? [];
   // Guardar invalida odómetros para que la lista vuelva a leer la API.
   const save = useSitmasMutation(sitmasApi.guardarOdometro, [keys.odometros]);
-  const [idVehiculo, setIdVehiculo] = useState(0);
   const [inicio, setInicio] = useState('');
   const [final, setFinal] = useState('');
   const [message, setMessage] = useState('');
@@ -414,7 +414,6 @@ function OdometroPanel({
         InicioOdom: start,
         FinalOdom: end,
       });
-      setIdVehiculo(0);
       setInicio('');
       setFinal('');
       setMessage('El odómetro se registró en SITMAS.');
@@ -434,7 +433,12 @@ function OdometroPanel({
       ListHeaderComponent={
         <>
           {header}
-          <QueryStatus queries={[vehiclesQuery, odometersQuery]} />
+          <QueryStatus queries={idVehiculo > 0 ? [vehiclesQuery, odometersQuery] : [vehiclesQuery]} />
+          {idVehiculo > 0 && odometersQuery.isError && (
+            <Text accessibilityRole="alert" style={styles.muted}>
+              No se pudieron consultar las lecturas de este vehículo. Podés reintentar o seleccionar otro vehículo.
+            </Text>
+          )}
           <Card
             title="Registro de odómetro"
             subtitle="Lecturas diarias de vehículos."
@@ -489,8 +493,10 @@ function OdometroPanel({
         </>
       }
       ListEmptyComponent={
-        odometersQuery.isSuccess ? (
-          <Text style={styles.muted}>No hay registros de odómetro.</Text>
+        !idVehiculo ? (
+          <Text style={styles.muted}>Seleccioná un vehículo para consultar sus lecturas.</Text>
+        ) : odometersQuery.isSuccess ? (
+          <Text style={styles.muted}>No hay registros de odómetro para este vehículo.</Text>
         ) : null
       }
       renderItem={({ item: o }) => (

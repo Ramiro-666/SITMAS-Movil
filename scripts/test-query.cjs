@@ -23,6 +23,35 @@ queryClient.setDefaultOptions({
 });
 const originalFetch = global.fetch;
 
+test('odómetros: selección requerida, errores y vacío se distinguen por vehículo', () => {
+  const React = require('react');
+  const source = fs.readFileSync(require.resolve('../src/app/index.tsx'), 'utf8');
+  const panel = source.slice(source.indexOf('function OdometroPanel('), source.indexOf('function Configuracion('));
+  const compiled = ts.transpileModule(panel, { compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const [vehicle, result] of [[0, {}], [1, { isSuccess: true, data: [{ IdRegistroOdomet: 57 }] }], [3, { isError: true }], [5, { isSuccess: true, data: [] }]]) {
+    let stateIndex = 0;
+    const calls = [];
+    const render = new Function('React', 'useState', 'useSitmasQuery', 'queries', 'useSitmasMutation', 'sitmasApi', 'keys', 'styles', 'FlatList', 'QueryStatus', 'Card', 'Text', 'View', 'Pressable', 'TextInput', compiled + '; return OdometroPanel;')(
+      React, initial => [stateIndex++ === 0 ? vehicle : initial, () => {}],
+      (config, enabled) => { calls.push({ config, enabled }); return config === 'vehicles' ? { data: [] } : result; },
+      { vehiculos: 'vehicles', odometrosVehiculo: id => ['odometros', id] },
+      () => ({}), {}, { odometros: ['odometros'] }, {},
+      'List', 'Status', 'Card', 'Text', 'View', 'Pressable', 'Input',
+    );
+    const tree = render({ header: null, footer: null });
+    assert.deepEqual(calls[1], { config: ['odometros', vehicle], enabled: vehicle > 0 });
+    const header = tree.props.ListHeaderComponent.props.children;
+    assert.equal(header[1].props.queries.length, vehicle ? 2 : 1, 'Actualizar no debe consultar sin selección');
+    assert.deepEqual(tree.props.data, result.data ?? []);
+    if (!vehicle) assert.match(tree.props.ListEmptyComponent.props.children, /Seleccioná un vehículo/);
+    if (result.isError) {
+      assert.equal(tree.props.ListEmptyComponent, null, 'Un error no equivale a historial vacío');
+      assert.match(header[2].props.children, /No se pudieron consultar/);
+    }
+    if (vehicle === 5) assert.match(tree.props.ListEmptyComponent.props.children, /No hay registros/);
+  }
+});
+
 test('el ícono GPS se copia como drawable monocromo Bio para expo-location', async () => {
   const path = require('node:path');
   const { parseStringPromise } = require('xml2js');
@@ -760,18 +789,18 @@ test('foto de odómetro pide permiso, espera la cámara, permite reintentar y us
 test('formulario del chofer exige kilómetros y foto y bloquea confirmar durante la captura', async () => {
   const React = require('react');
   const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/components/PanelChofer.tsx'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  const states = ['hoy', null, { Id: 82, Id_Vehiculo: 2 }, '1000', '', false, '', false];
+  const states = ['', 'hoy', null, { Id: 82, Id_Vehiculo: 2 }, '1000', '', false, '', false];
   let index = 0, writes = 0;
   const module = { exports: {} };
   const stubs = {
-    react: { ...React, useState: () => { const i = index++; return [states[i], value => { states[i] = value; }]; } },
+    react: { ...React, useEffect: () => {}, useState: () => { const i = index++; return [states[i], value => { states[i] = value; }]; } },
     'react-native': { View: 'View', Pressable: 'Pressable', StyleSheet: { create: value => value } },
     './AppText': { Text: 'Text', TextInput: 'Input' }, './FotoOdometro': { default: 'FotoOdometro', __esModule: true },
     './route-board/BoardUI': { Action: 'Action', BoardModal: 'BoardModal', ui: {} },
     '../query/sitmas': { keys: {}, queries: { odometrosVehiculo: () => [] }, useSitmasQuery: () => ({ isSuccess: true, data: [] }), useSitmasMutation: () => ({ isPending: false, run: async () => { writes++; } }) },
     '../state/session-store': { useSessionStore: selector => selector({ session: { idUsuario: 11 } }) },
     '../services/driver-routes': { ownRoutes: () => [], routeDate: () => '2026-10-30' },
-    '@tanstack/react-query': { useIsMutating: () => 0 },
+    '@tanstack/react-query': { useIsMutating: () => 0, useQuery: () => ({}), useQueryClient: () => ({}) },
   };
   new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? (name.startsWith('.') ? {} : require(name)), module, module.exports);
   function find(element, predicate) {
@@ -785,11 +814,11 @@ test('formulario del chofer exige kilómetros y foto y bloquea confirmar durante
   confirm(tree).props.onPress();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(writes, 0);
-  states[4] = 'file:///cache/odometer.jpg';
+  states[5] = 'file:///cache/odometer.jpg';
   assert.equal(confirm(render()).props.disabled, false);
-  states[3] = '';
+  states[4] = '';
   assert.equal(confirm(render()).props.disabled, true);
-  states[3] = '1000'; states[5] = true;
+  states[4] = '1000'; states[6] = true;
   tree = render();
   assert.equal(confirm(tree).props.disabled, true);
   assert.equal(find(tree, e => e.type === 'BoardModal').props.busy, true);
@@ -1032,4 +1061,59 @@ test('fecha de cabecera rechaza fechas inexistentes y conserva días válidos', 
   assert.equal(validPlannedDate('2028-02-29'), true);
   assert.equal(validPlannedDate('2026-02-29'), false);
   assert.equal(validPlannedDate(''), false);
+});
+
+test('cierre administrativo vuelve a rutas, muestra aviso y no lo repite', () => {
+  const React = require('react');
+  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/components/PanelChofer.tsx'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+  const states = ['', 'historial', { Id: 82, Id_Estado: 3 }, null, '', '', false, '', false];
+  let index = 0, seen = null, invalidated = 0;
+  const effects = [];
+  const module = { exports: {} };
+  const stubs = {
+    react: { ...React, useState: () => { const i = index++; return [states[i], value => { states[i] = value; }]; }, useEffect: fn => effects.push(fn) },
+    'react-native': { View: 'View', Pressable: 'Pressable', StyleSheet: { create: value => value } },
+    './AppText': { Text: 'Text', TextInput: 'Input' },
+    './route-board/BoardUI': { Action: 'Action', BoardModal: 'BoardModal', ui: {} },
+    '../query/sitmas': { keys: { hojas: ['hojasRuta'] }, queries: { odometrosVehiculo: () => [] }, useSitmasQuery: () => ({ isSuccess: true, data: [] }), useSitmasMutation: () => ({ isPending: false }) },
+    '../state/session-store': { useSessionStore: selector => selector({ session: { idUsuario: 11 } }) },
+    '../services/driver-routes': { ownRoutes: () => [] },
+    '../services/trip-notifications': { notifyTripClosed: async () => {}, lastTripAlert: () => seen, markTripAlert: (_user, id) => { seen = id; } },
+    '@tanstack/react-query': { useIsMutating: () => 0, useQuery: () => ({ data: [{ id: 'event-82', routeId: 82 }], refetch: () => {} }), useQueryClient: () => ({ invalidateQueries: () => { invalidated++; } }) },
+  };
+  new Function('require', 'module', 'exports', compiled)(name => stubs[name] ?? (name.startsWith('.') ? {} : require(name)), module, module.exports);
+  module.exports.default(); effects.splice(0).forEach(fn => fn());
+  assert.equal(states[1], 'hoy');
+  assert.equal(states[2], null);
+  assert.match(states[0], /ruta #82 fue finalizada por un administrador/);
+  assert.equal(invalidated, 1);
+  index = 0; module.exports.default(); effects.splice(0).forEach(fn => fn());
+  assert.equal(invalidated, 1);
+});
+
+test('notificaciones locales piden permiso y notifican sin Firebase ni token push', async () => {
+  const compiled = ts.transpileModule(fs.readFileSync(require.resolve('../src/services/trip-notifications.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
+  const calls = [];
+  let granted = false;
+  const module = { exports: {} };
+  const stubs = {
+    'react-native': { Platform: { OS: 'android' } },
+    'expo-file-system': {},
+    'expo-notifications': {
+      setNotificationHandler: () => {}, AndroidImportance: { HIGH: 4 },
+      setNotificationChannelAsync: async () => calls.push('channel'),
+      getPermissionsAsync: async () => ({ granted, canAskAgain: true }),
+      requestPermissionsAsync: async () => { calls.push('permission'); return { granted }; },
+      scheduleNotificationAsync: async value => calls.push(value),
+    },
+  };
+  new Function('require', 'module', 'exports', compiled)(name => stubs[name], module, module.exports);
+  assert.equal(await module.exports.notificationPermission(true), false);
+  assert.deepEqual(calls, ['channel', 'permission']);
+  granted = true;
+  assert.equal(await module.exports.notificationPermission(), true);
+  await module.exports.notifyTripClosed(82, 'event-82');
+  assert.equal(calls.at(-1).identifier, 'event-82');
+  assert.match(calls.at(-1).content.body, /ruta #82 fue finalizada por un administrador/);
+  assert.deepEqual(calls.at(-1).trigger, { channelId: 'viajes' });
 });

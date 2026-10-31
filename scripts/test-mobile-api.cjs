@@ -73,3 +73,56 @@ test('el servidor móvil exige identidad validada y no entrega datos a otras cue
   assert.equal(cors.headers.get('access-control-allow-origin'), 'http://localhost:8081');
   assert.equal((await request('/api/hojaruta', sign(1), { headers: { Origin: 'https://evil.invalid' } })).status, 403);
 });
+
+test('finalización forzada: solo administrador validado, viaje en curso y cierre confirmado', async t => {
+  let state = 3, distance = 12.5, writes = 0, confirmed = true;
+  const tokenFor = role => {
+    const payload = { sub: '1', exp: Math.floor(Date.now() / 1000) + 300, role };
+    return Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url') + '.' + Buffer.from(JSON.stringify(payload)).toString('base64url') + '.fixture';
+  };
+  const upstream = async (path, method, headers, body) => {
+    if (path.startsWith('/api/Usuario/')) return result(200, { Id: 1, Id_Estado_Usuario: 1 });
+    if (method === 'PATCH') {
+      writes++;
+      assert.deepEqual(JSON.parse(body), { DistanciaTotal: 12.5 });
+      if (confirmed) state = 5;
+      return result(200, {});
+    }
+    return result(200, { Id: 9, Id_Estado: state, Distancia_Total_Estimada_Km: distance });
+  };
+  const server = http.createServer(createMobileHandler({ upstream, hosts: ['127.0.0.1'] }));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const request = role => fetch(`http://127.0.0.1:${server.address().port}/api/hojaruta/9/forzar-finalizacion`, { method: 'PATCH', headers: { Authorization: `Bearer ${tokenFor(role)}` } });
+  assert.equal((await request('Chofer')).status, 403);
+  assert.equal(writes, 0);
+  assert.equal((await request('Administrador')).status, 200);
+  assert.equal(state, 5);
+  assert.equal((await request('Administrador')).status, 409);
+  assert.equal(writes, 1);
+  state = 3; distance = -1;
+  assert.equal((await request('Administrador')).status, 409);
+  assert.equal(writes, 1);
+  distance = 12.5; confirmed = false;
+  assert.equal((await request('Administrador')).status, 502);
+});
+
+test('avisos persistentes: puentes comparten estado y cada chofer ve solo sus cierres', t => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { createTripAlerts } = require('./trip-alerts.cjs');
+  const root = path.join(__dirname, '../.local');
+  fs.mkdirSync(root, { recursive: true });
+  const folder = fs.mkdtempSync(path.join(root, 'test-alerts-'));
+  t.after(() => fs.rmSync(folder, { recursive: true }));
+  const file = path.join(folder, 'alerts.json');
+  const adminBridge = createTripAlerts(file);
+  const driverBridge = createTripAlerts(file);
+  adminBridge.closed(11, 82);
+  assert.equal(driverBridge.events(11).length, 1);
+  assert.equal(driverBridge.events(1).length, 0);
+  createTripAlerts(file).closed(11, 83);
+  assert.equal(driverBridge.events(11).length, 2);
+  adminBridge.closed(11, 83);
+  assert.equal(driverBridge.events(11).length, 2);
+});

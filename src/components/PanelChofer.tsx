@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
+import { sitmasApi } from '../services/sitmas-api';
+import { lastTripAlert, markTripAlert, notifyTripClosed } from '../services/trip-notifications';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './AppText';
 import { Action, BoardModal, ui } from './route-board/BoardUI';
@@ -10,7 +13,6 @@ import { ownRoutes, routeDate } from '../services/driver-routes';
 import type { HojaRuta } from '../services/sitmas-api';
 import QueryStatus from './QueryStatus';
 import MapaViajeChofer from './MapaViajeChofer';
-import { useIsMutating } from '@tanstack/react-query';
 import { validCoordinates } from './maps/types';
 import { currentTaskCoordinates } from '../services/optimized-circuit';
 import FotoOdometro from './FotoOdometro';
@@ -40,9 +42,21 @@ function AvailableTrip({ route, busy, onAccept }: { route: HojaRuta; busy: boole
   </View>;
 }
 export default function PanelChofer() {
+  const client = useQueryClient();
+  const [adminNotice, setAdminNotice] = useState('');
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy');
   const [selected, setSelected] = useState<HojaRuta | null>(null);
   const session = useSessionStore((state) => state.session)!;
+  const alerts = useQuery({ queryKey: ['tripAlerts', session.idUsuario], queryFn: ({ signal }) => sitmasApi.tripAlerts(signal), refetchInterval: 5000, staleTime: 0 });
+  const latestAlert = alerts.data?.at(-1);
+  useEffect(() => {
+    if (!latestAlert || lastTripAlert(session.idUsuario) === latestAlert.id) return;
+    setSelected(null); setTab('hoy'); setAccepting(null);
+    setAdminNotice(`La ruta #${latestAlert.routeId} fue finalizada por un administrador.`);
+    markTripAlert(session.idUsuario, latestAlert.id);
+    void notifyTripClosed(latestAlert.routeId, latestAlert.id).catch(() => setAdminNotice(`La ruta #${latestAlert.routeId} fue finalizada por un administrador. No se pudo mostrar la notificación del teléfono.`));
+    void client.invalidateQueries({ queryKey: keys.hojas });
+  }, [latestAlert?.id, session.idUsuario, client]);
   const [accepting, setAccepting] = useState<HojaRuta | null>(null);
   const [kilometers, setKilometers] = useState('');
   const [photoUri, setPhotoUri] = useState('');
@@ -63,7 +77,8 @@ export default function PanelChofer() {
   const active = own.filter((route) => route.Id_Estado === 3);
   const history = own.filter((route) => route.Id_Estado === 5);
   const available = (today.data ?? []).filter((route) => route.Id_Estado === 2);
-  if (selected) return <RouteDetail route={selected} onBack={() => setSelected(null)} />;
+  const freshSelected = selected && all.data?.find(route => route.Id === selected.Id);
+  if (selected) return <RouteDetail route={freshSelected ?? selected} onBack={() => setSelected(null)} />;
   if (tab === 'hoy' && active.length) return <RouteDetail route={active[0]}
     backLabel="VER HISTORIAL ›" onBack={() => setTab('historial')} />;
   function routeCard(route: HojaRuta) {
@@ -76,6 +91,7 @@ export default function PanelChofer() {
   }
   return (
     <View style={styles.container}>
+      {!!adminNotice && <View style={{ gap: 8 }}><Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={ui.notice}>{adminNotice}</Text><Action title="Entendido" secondary onPress={() => setAdminNotice('')} /></View>}
       <Text style={styles.title}>Viajes disponibles</Text>
       <QueryStatus queries={[today, all]} />
       <View style={styles.tabs}>

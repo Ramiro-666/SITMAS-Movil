@@ -293,6 +293,9 @@ export const sitmasApi = {
     request<{ Mensaje: string }>(`hojaruta/${id}/finalizar`, {
       method: 'PATCH', body: JSON.stringify({ DistanciaTotal }),
     }),
+  tripAlerts: (signal?: AbortSignal) => request<{ id: string; routeId: number; createdAt: string }[]>('trip-alerts', { signal }),
+  forzarFinalizacion: (id: number) =>
+    request<{ Mensaje: string }>('hojaruta/' + id + '/forzar-finalizacion', { method: 'PATCH' }),
   odometros: (signal?: AbortSignal) =>
     request<Odometro[]>('registroodometro', { signal }),
   guardarOdometro: (

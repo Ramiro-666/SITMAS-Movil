@@ -30,7 +30,7 @@ export async function assignPendingTask(taskId: number, routeId: number, assigne
   if (!confirmed.some((t) => t.Id_Detalle_HDR === taskId)) throw new Error('La tarea no aparece en esta hoja. Actualizá el tablero para comprobar su asignación actual.');
   const failed = await refreshRouteTotals(sourceId ? [sourceId, routeId] : [routeId], origins);
   const success = sourceId ? 'Tarea trasladada.' : 'Tarea asignada.';
-  return failed.length ? `${success} No se pudo actualizar el total de HR ${failed.join(', ')}; abrí «Ver en mapa» para recalcular y guardar los kilómetros.` : `${success} Circuito recalculado y total guardado.`;
+  return failed.length ? `${success} No se pudo actualizar el total de HR ${failed.join(', ')}; abrí «Detalles» para recalcular y guardar los kilómetros.` : `${success} Circuito recalculado y total guardado.`;
 }
 
 async function refreshRouteTotals(ids: number[], origins: CatalogItem[]) {
@@ -56,5 +56,5 @@ export async function deleteTask(taskId: number, sourceId: number | null, origin
   if (!current.some((t) => t.Id_Detalle_HDR === taskId && (t.Id_HojaRuta || null) === sourceId)) throw new Error('La tarea cambió. Actualizá el tablero antes de eliminarla.');
   await sitmasApi.borrarParada(taskId);
   const failed = sourceId ? await refreshRouteTotals([sourceId], origins) : [];
-  return failed.length ? `Tarea eliminada. No se pudo actualizar el total de HR ${sourceId}; recalculalo desde «Ver en mapa».` : 'Tarea eliminada. Recorrido actualizado.';
+  return failed.length ? `Tarea eliminada. No se pudo actualizar el total de HR ${sourceId}; recalculalo desde «Detalles».` : 'Tarea eliminada. Recorrido actualizado.';
 }

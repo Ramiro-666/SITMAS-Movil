@@ -13,6 +13,7 @@ import { currentTaskCoordinates } from '../services/optimized-circuit';
 import { validCoordinates } from './maps/types';
 import { validPlannedDate } from '../services/pending-alert';
 import { useRouteBoardStore } from '../state/route-board-store';
+import { useSessionStore } from '../state/session-store';
 
 const emptyTask = { Id_TipoMovimiento: 0, Id_RecursoMov: 0, Id_Origen: 0, Id_TipoMaterial: 0 };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -37,10 +38,10 @@ function RouteCard({ route, origins, busy, onAssign, onMap, onSelect, onDelete }
   const detail = useSitmasQuery(queries.paradas(route.Id));
   const tasks = currentTaskCoordinates(detail.data ?? [], origins);
   return <DropTarget routeId={route.Id} disabled={busy || !writable(route)} onDrop={(id) => onAssign(id, route.Id)}>
-    <View style={styles.route}>
-      <View style={styles.routeHeader}>
+    <View style={[styles.route, route.Id_Estado === 3 && styles.activeRoute]}>
+      <View style={[styles.routeHeader, route.Id_Estado === 3 && styles.activeHeader]}>
         <View style={ui.row}><Text style={styles.routeTitle}>HR #{route.Id}</Text><Text style={styles.plate}>{route.Vehiculo || 'Sin vehículo'}</Text></View>
-        <View style={ui.row}><Text style={[ui.muted, styles.routeHeaderText]}>{route.FechaFormateada}</Text><Action title={`Ver en mapa · HR ${route.Id}`} secondary onPress={onMap} disabled={busy} /></View>
+        <View style={ui.row}><Text style={[ui.muted, styles.routeHeaderText]}>{route.FechaFormateada}</Text><Action title={`Detalles · HR ${route.Id}`} secondary onPress={onMap} disabled={busy} /></View>
       </View>
       <View style={styles.routeBody}>
         <View style={ui.row}><Text style={[styles.tag, route.Estado === 'Asignado' && styles.assigned]}>{route.Estado || 'Pendiente'}</Text><Text style={ui.muted}>Total registrado: {(route.Distancia_Total_Estimada_Km ?? 0).toFixed(2)} km</Text></View>
@@ -56,6 +57,8 @@ function RouteCard({ route, origins, busy, onAssign, onMap, onSelect, onDelete }
 }
 export default function PlanificadorRutas({ header, footer }: { header: React.ReactElement; footer: React.ReactElement }) {
   const client = useQueryClient();
+  const administrator = useSessionStore((state) => state.session?.rol.split(',').some((role) => role.trim().toLowerCase() === 'administrador') ?? false);
+  const [confirmFinish, setConfirmFinish] = useState<number | null>(null);
   const { width } = useWindowDimensions();
   const wide = width >= 850;
   // TanStack mantiene datos remotos y caché; no duplicarlos en useState/Zustand.
@@ -178,9 +181,17 @@ export default function PlanificadorRutas({ header, footer }: { header: React.Re
       <Text style={ui.text}>Se eliminará la tarea de {deleting.Origen || 'este origen'}{deleting.Id_HojaRuta ? ` de la hoja HR ${deleting.Id_HojaRuta}` : ' de pendientes'}. Esta acción no se puede deshacer.</Text>
       <Action title="Confirmar eliminación" disabled={busy} onPress={() => { void perform(() => deleteTask(deleting.Id_Detalle_HDR, deleting.Id_HojaRuta || null, origins), (message) => { setDeleting(null); setNotice(String(message)); }); }} />
     </BoardModal>}
-    {selectedMap && <BoardModal title={`Recorrido · HR ${selectedMap.Id} · ${selectedMap.FechaFormateada}`} busy={busy} onClose={() => board.openMap(null)}>
+    {selectedMap && <BoardModal title={`Detalles · HR ${selectedMap.Id} · ${selectedMap.FechaFormateada}`} busy={busy} onClose={() => { board.openMap(null); setConfirmFinish(null); }}>
       {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
       {!!notice && <Text style={ui.notice}>{notice}</Text>}
+      <Text style={ui.text}>{selectedMap.Estado} · {selectedMap.ChoferNombreCompleto || 'Sin chofer'}</Text>
+      {administrator && selectedMap.Id_Estado === 3 && <View style={styles.finishPanel}>
+        {confirmFinish === selectedMap.Id ? <>
+          <Text style={ui.text}>El viaje quedará Finalizado, con la distancia registrada en la hoja. Se conservarán sus registros; el odómetro no se modificará sin una lectura real. Esta acción no se puede deshacer.</Text>
+          <Action title="Confirmar finalización forzada" disabled={busy} onPress={() => { void perform(() => sitmasApi.forzarFinalizacion(selectedMap.Id), () => { setConfirmFinish(null); setNotice('Viaje finalizado por el administrador. El chofer recibirá el aviso al actualizarse su app.'); }); }} />
+          <Action title="Volver a detalles" secondary disabled={busy} onPress={() => setConfirmFinish(null)} />
+        </> : <Action title="Forzar finalización" disabled={busy} onPress={() => setConfirmFinish(selectedMap.Id)} />}
+      </View>}
       <CircuitMap routeId={selectedMap.Id} origins={origins} busy={busy} canSave={writable(selectedMap)} />
     </BoardModal>}
   </TransferProvider>;
@@ -200,6 +211,9 @@ const styles = StyleSheet.create({
   workHint: { fontSize: 11, color: '#c5d9cd' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' },
   route: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cfddd4', borderRadius: 14 },
+  activeRoute: { borderColor: '#c45108', borderWidth: 2, backgroundColor: '#fff3e5' },
+  activeHeader: { backgroundColor: '#a94108' },
+  finishPanel: { backgroundColor: '#fff3e5', borderColor: '#c45108', borderWidth: 1, borderRadius: 9, padding: 12, gap: 10 },
   routeHeader: { backgroundColor: '#087947', padding: 10, gap: 6, borderTopLeftRadius: 13, borderTopRightRadius: 13 },
   routeTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
   routeHeaderText: { color: '#fff' },

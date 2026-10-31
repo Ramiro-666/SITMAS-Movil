@@ -2,82 +2,43 @@
 
 Aplicación de Expo y React Native conectada a la API de SITMAS y su base SQL Server. TanStack Query gestiona los datos remotos y Zustand mantiene la sesión del usuario y el estado de interacción del tablero en memoria.
 
-## Estado actual · 30/10/2026
-
-### Foto inicial del odómetro · rama de pruebas
-
-Los viajes nuevos requieren ingresar los kilómetros y tomar una foto del odómetro antes de confirmar. La interfaz usa los botones de SITMAS Móvil y `expo-camera`, siguiendo el ejemplo PostalesViaje: solicita permiso de cámara, espera su inicialización, permite capturar, revisar y repetir la foto. Si el permiso está bloqueado, ofrece abrir los ajustes. No solicita micrófono ni acceso a la galería.
-
-Solo se conserva la URI temporal en el registro local del viaje, separada por usuario y ruta. La foto no se envía a SITMAS ni a SQL; el sistema puede limpiar su archivo de caché, y la referencia se retira al finalizar el viaje. Los viajes anteriores sin foto pueden finalizar normalmente. No se verifica automáticamente que los dígitos de la foto coincidan con los kilómetros ingresados.
-
-Requiere una nueva APK para incluir el módulo y el permiso nativo; la APK versionCode 4 enlazada abajo no incluye esta función. Falta validar la cámara en un celular.
-
-### APK actual · 28/10/2026
-
-La **APK 1.0.0, versionCode 4** se compiló correctamente en Expo e incluye la compatibilidad con la API actual y el acceso móvil exclusivo de Juan y Mauro. Conserva la firma para instalar como actualización. La instalación y validación de esta versión en un celular siguen pendientes de confirmación.
-
-[Descargar APK](https://expo.dev/artifacts/eas/iw6DnH51t58-ux-bnIVlTIwqDq1ynHW-323VjQyeGko.apk) · [Compilación en Expo](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/2086417b-47e3-4a78-882c-24e65a9ae04d). Requiere la misma LAN, la API y el puente HTTPS encendidos. El enlace interno vence el 11/11/2026 y el certificado del piloto el 17/11/2026.
-
-### Compatibilidad con SITMAS · 28/10/2026
-
-El acceso móvil admite únicamente las cuentas existentes de Juan Videla (usuario 1) y Mauro Gerosa (usuario 11), después de que la API valide sus credenciales. Las demás cuentas permanecen en el login con el aviso: «Su usuario no tiene los permisos necesarios para utilizar SITMAS Móvil, comuníquese con su supervisor». La restricción se aplica tanto en el cliente como en el puente de `my-app`; no cambia la autorización de la API original.
-
-La integración usa el rol `Operador_Logistica`, el catálogo `GET /api/TP_Material`, el mantenimiento de vehículos mediante `POST /api/Vehiculo`, `PUT /api/Vehiculo/{id}` y `DELETE /api/Vehiculo/{id}`, y el campo `SubtipoMaterial` de clasificación. Las tareas pendientes no solicitan fecha propia: la API y la base actuales no almacenan `FechaPrevista`; la fecha corresponde a la hoja asignada. El inicio informa todas las tareas sin asignar.
-
-Los endpoints de peso bruto y rendimiento del servidor devuelven errores SQL; no se utilizan en las pantallas actuales. La API original sigue requiriendo mejoras de autorización. Estos cambios no modifican SITMAS principal ni su base y están incluidos en la APK versionCode 4.
-
-### Acceso móvil protegido · 28/10/2026
-
-Todas las consultas móviles deben pasar por el puente incluido en `my-app`. El puente comprueba que el JWT pertenece a Juan o Mauro y consulta `Usuario/ListarPorId/{id}` con ese Bearer en cada solicitud: SITMAS original valida la firma y el vencimiento, y el puente exige que la cuenta siga activa. Decodificar el JWT por sí solo nunca permite acceder. Si la validación falla o la API no responde, no se entrega información. El login de otra cuenta recibe 403 sin devolver su token. Solo se exponen los endpoints utilizados por la app; se bloquean, por ejemplo, los listados de usuarios.
-
-- **Web en esta PC:** iniciar SITMAS original, ejecutar `npm run api:mobile` y luego `npm run web` (o iniciar Expo en 8081). La URL de desarrollo es `http://localhost:8098/api`; ese servidor escucha únicamente en `127.0.0.1` y admite los orígenes locales 8081/8082. HTTP se usa solo para el tramo de desarrollo dentro de esta PC. La conexión del puente a SITMAS conserva HTTPS con el certificado verificado.
-- **APK en la LAN:** iniciar SITMAS original y `npm run api:lan`; conserva el certificado y la URL HTTPS del piloto, `https://192.168.100.2:8443/api`. Reiniciar una instancia anterior del puente para aplicar la protección nueva. Comprobar con `npm run api:lan:check`.
-- Reiniciar Expo tras cambiar `.env.local` y volver a iniciar sesión. La URL directa `https://localhost:44325/api` no debe configurarse en el cliente móvil y se rechaza explícitamente. Para un despliegue futuro, la URL pública debe corresponder a este puente protegido con HTTPS, no directamente a la API original.
-- La API original sigue siendo accesible por su propia dirección y conserva sus usuarios y sus limitaciones de autorización. Proteger el puente móvil no impide acceder a esa otra dirección. Resolver esa exposición exige cambios fuera de `my-app`, que no están autorizados en esta tarea.
-
-Las sesiones usan el vencimiento del JWT original (8 horas): cerrar sesión limpia token y caché del cliente, pero no revoca una copia del token en el backend. No se copiaron claves JWT, credenciales ni configuraciones de SITMAS principal.
-
-### Piloto Android instalado · 20/10/2026
-
-El piloto Android por Wi-Fi local está instalado y el usuario confirmó el funcionamiento de la **APK 1.0.0, versionCode 3**. Se probaron el acceso con administrador y chofer, las rutas de prueba, el mapa y las paradas espontáneas. La última actualización corrige la numeración de los marcadores después de reordenar el recorrido, redondea hacia arriba el odómetro sugerido al finalizar y muestra «Bio» blanco centrado en la notificación GPS.
-
-[Compilación Android verificada en Expo](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/cd531108-e189-4318-94ab-958510e9f5a4). La APK se instala sobre la anterior mediante **Actualizar**, conservando la misma firma. No requiere publicar en Google Play ni contratar una suscripción. Las compilaciones gratuitas están sujetas a la cuota y cola de EAS.
-
-Para usarla deben mantenerse encendidos la API de SITMAS y el puente HTTPS, y el celular debe estar en la misma red que la PC. La URL incluida en este piloto es `https://192.168.100.2:8443/api`. Si la app no conecta, ejecutar `npm run api:lan:check` y comprobar que también esté iniciado `npm run api:lan`.
-
-El piloto no modifica el código de SITMAS principal. Las operaciones de viajes y las hojas ficticias de prueba sí escriben datos mediante su API. La prueba física en iOS, el consumo de batería y el seguimiento prolongado con pantalla bloqueada siguen pendientes de validación específica.
-
 ## Integrantes
 
 - COGNINI, Facundo
 - LOPEZ DIAZ, Erika
-- RIVERO, Cristina 
-- VIDELA GUTIÉRREZ, Juan
+- RIVERO, Cristina
 - ZAMORA PÁRRAGA, Ramiro Maximiliano
 
 ## Ejecución
 
-Después de clonar o descargar el repositorio, ejecutar el siguiente comando desde una terminal ubicada en la carpeta del proyecto. Este paso **rehidrata el proyecto**: descarga las dependencias declaradas y genera nuevamente la carpeta local `node_modules/`, que no se incluye en GitHub.
+Desde la carpeta del proyecto:
 
 ```bash
 npm install
 ```
 
-Primero iniciar la API del proyecto SITMAS en `https://localhost:44325`. La app usa sus usuarios y registros reales; no se conecta directamente a SQL Server. Luego iniciar Expo:
+Este paso descarga las dependencias y reconstruye `node_modules/`, que no se incluye en el repositorio.
 
-```bash
-npm start
-```
+1. Iniciar la API de SITMAS en `https://localhost:44325`.
+2. En otra terminal, iniciar el acceso móvil protegido y mantenerlo abierto:
 
-Para abrirla en el navegador, presionar `w` en la terminal de Expo o ejecutar:
+   ```bash
+   npm run api:mobile
+   ```
 
-```bash
-npm run web
-```
+3. Iniciar Expo y presionar `w` para abrir la versión web:
 
-## Features
+   ```bash
+   npm start
+   ```
 
-| Feature | Estado |
+Con `npm start`, la app se abre en **http://localhost:8081/**. Este comando inicia Expo, pero no inicia el puente del puerto 8098. Como alternativa, `npm run web` usa el puerto 8082. El comando antiguo `npm run web:demo` también utiliza datos reales.
+
+Para el piloto Android en la misma Wi-Fi, usar `npm run api:lan` en lugar del puente local y comprobarlo con `npm run api:lan:check`. La APK utiliza `https://192.168.100.2:8443/api`; la API y el puente deben permanecer encendidos.
+
+## Funcionalidades
+
+| Funcionalidad | Estado |
 | --- | --- |
 | Pantalla de acceso con animación BioCba | Completado |
 | Autenticación contra la API de SITMAS | Completado |
@@ -113,49 +74,97 @@ npm run web
 | Generación e instalación de una APK de prueba en Android | Completado · versionCode 3 |
 | Permiso GPS, posición actual y servicio de ubicación durante viajes | Implementado en Android |
 | Áreas seguras para barras del sistema e ícono GPS Bio | Implementado y probado en el piloto |
+| Finalización administrativa desde Detalles y resaltado de viajes en curso | Implementado; pendiente de prueba física |
+| Regreso automático del chofer y aviso de cierre administrativo | Implementado; actualización cada 5 segundos con la app activa |
+| Notificación local y permiso obligatorio para el chofer | Implementado; requiere nueva APK y prueba física |
 | Prueba de la APK con servidor y base de datos en la nube | Próxima feature · pendiente de la publicación oficial del servidor |
+| Kilómetros iniciales y foto obligatoria del odómetro con Expo Camera (`expo-camera`), solicitud de permiso, revisión de la captura y URI temporal local | Implementado en rama de pruebas; falta prueba física y nueva APK |
 
-### Próxima feature: prueba con el servidor en la nube
+## Acceso y configuración
 
-Cuando el compañero publique el servidor de SITMAS y la base de datos, se preparará una APK de prueba con la URL HTTPS de la API en la nube. Se verificará desde el celular el inicio de sesión, la consulta y aceptación de rutas, las paradas espontáneas, los mapas y el cierre de viajes, comprobando que los cambios se guarden en la base de datos alojada en la nube.
+El móvil admite las cuentas existentes de **Juan Videla (1)** y **Mauro Gerosa (11)**, una vez validadas por SITMAS. Las demás reciben: «Su usuario no tiene los permisos necesarios para utilizar SITMAS Móvil, comuníquese con su supervisor».
 
-Esta prueba queda **pendiente hasta disponer del servidor, la base de datos y la URL pública de la API**. Permitirá comprobar el funcionamiento fuera de la red Wi-Fi de esta PC y sin depender del puente HTTPS local. La app seguirá accediendo a los datos mediante la API; no se conectará directamente a SQL Server. El piloto LAN actual continúa disponible mientras se prepara ese entorno.
+Las solicitudes pasan por el puente de `my-app`. Este admite solo los endpoints utilizados, comprueba la identidad y el estado activo de la cuenta mediante `Usuario/ListarPorId/{id}` con el Bearer original en cada solicitud. SITMAS valida su firma y vencimiento; si falla la validación, el puente no entrega datos. Las cuentas restantes conservan su acceso al SITMAS original.
 
-## Hoja de ruta: actualización del 30/09/2026
+La sesión dura lo establecido por el JWT original (8 horas) y permanece en memoria. Cerrar sesión limpia token y caché del cliente, pero no revoca otras copias del token en el servidor. No se almacenan contraseñas.
 
-El módulo adopta el funcionamiento del SITMAS actualizado: las antiguas paradas se presentan como **tareas**, y se elimina por completo la sección **Horarios de paradas**. Los cambios se desarrollan en la rama `test-mapa-hoja-de-ruta`.
-
-1. **Nueva tarea** guarda una tarea en la lista de pendientes usando los orígenes y catálogos reales.
-2. **Nueva cabecera** crea una hoja con fecha y vehículo; el chofer puede quedar sin asignar.
-3. Arrastrar una tarea a la hoja o usar **Asignar**. Para corregir una asignación, arrastrarla a otra hoja o usar **Mover**. En web, mantener el puntero cerca del borde inferior o superior desplaza el tablero a velocidad moderada.
-4. **Eliminar** permite borrar una tarea después de confirmar. Los botones de asignación/movimiento y eliminación comparten una fila para mantener las tarjetas compactas.
-5. **Ver en mapa**, junto a la fecha, muestra las tareas numeradas y el circuito desde EMEC y de regreso a EMEC. Agregar una tarea desde el mapa actualiza el recorrido automáticamente.
-
-Al trasladar una tarea se recalculan los totales de ambas hojas; al eliminar la última tarea de una hoja, el total queda en cero. Si falla el cálculo después de guardar un cambio, se informa y se puede reintentar desde el mapa con **Actualizar recorrido** y **Guardar km calculados**. Solo se modifican tareas de hojas pendientes o asignadas.
-
-### Mapa y configuración
-
-Para probar en esta PC, iniciar la API, ejecutar `npm run web` y abrir http://localhost:8082 con la cuenta habitual de SITMAS. Detener una instancia anterior con **Ctrl+C** antes de iniciar otra. El antiguo comando `npm run web:demo` también usa datos reales y ya no inicia el servidor ficticio del puerto 8097.
-
-La configuración local se define en `.env.local`:
+Configurar en `.env.local`:
 
 | Variable | Uso |
 | --- | --- |
-| `EXPO_PUBLIC_SITMAS_API_URL` | Puente móvil protegido; por defecto `http://localhost:8098/api` para desarrollo en esta PC. En la APK LAN, HTTPS en 8443. |
-| `EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY` | Clave de Maps JavaScript API con permisos para localhost |
-| `EXPO_PUBLIC_OSRM_URL` | Servidor de cálculo vial; por defecto `https://router.project-osrm.org` |
+| `EXPO_PUBLIC_SITMAS_API_URL` | Puente protegido; por defecto `http://localhost:8098/api` en esta PC. En el piloto LAN se usa HTTPS en 8443. |
+| `EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY` | Clave de Maps JavaScript API autorizada para localhost. |
+| `EXPO_PUBLIC_OSRM_URL` | Cálculo vial; por defecto `https://router.project-osrm.org`. |
 
-El mapa requiere conexión a Internet. No guardar credenciales de usuarios ni secretos de servidor en el repositorio o en variables `EXPO_PUBLIC_*`. Las altas, asignaciones y eliminaciones operan sobre la base real mediante la API.
+Reiniciar Expo y volver a ingresar después de cambiar la configuración. El puente local escucha en `127.0.0.1` y admite orígenes web locales en 8081/8082. HTTP se usa solo dentro de esta PC; el enlace con SITMAS conserva HTTPS y verificación del certificado.
 
-### Alcance de la optimización
+La dirección directa `https://localhost:44325/api` se rechaza como configuración del móvil. Un despliegue público debe exponer el puente protegido por HTTPS. La API original conserva sus propias limitaciones de autorización y sigue accesible por su dirección; resolverlas requiere cambios fuera de este proyecto.
 
-- La sede y las tareas usan coordenadas reales de SITMAS. Si faltan coordenadas, se avisa que el recorrido está incompleto; no se inventan puntos ni distancias.
-- Hasta 11 tareas se busca el mejor orden de la matriz vial dirigida; entre 12 y 50 se usa una aproximación para reducir kilómetros. No se garantiza el recorrido mínimo absoluto entre todas las calles posibles.
-- El orden se calcula en la app porque la API actual no ofrece un campo para persistirlo. Se guarda el total del circuito; los tramos históricos individuales pueden diferir del nuevo orden.
-- Las estimaciones no incluyen tráfico en vivo, carga/descarga ni restricciones específicas para camiones. El servidor público de OSRM no garantiza disponibilidad.
-- La comprobación visual se realizó en Expo web y en el piloto Android físico, confirmado por el usuario el 20/10/2026. La validación en iOS físico sigue pendiente.
+Los mapas requieren Internet. No incluir credenciales ni secretos de servidor en Git o en variables `EXPO_PUBLIC_*`. Las altas, asignaciones y eliminaciones escriben en la base real mediante la API.
 
-## Verificación
+## Operación
+
+### Hojas de ruta
+
+El módulo usa **tareas**; la antigua sección Horarios de paradas fue retirada. Los cambios se trabajan en `test-mapa-hoja-de-ruta`.
+
+- **Nueva tarea** crea un pendiente con orígenes y catálogos reales.
+- **Nueva cabecera** crea una hoja con fecha y vehículo; puede quedar sin chofer.
+- Arrastrar o usar **Asignar/Mover** permite distribuir tareas. En web, acercarse al borde desplaza el tablero.
+- **Eliminar** pide confirmación. Solo se modifican tareas de hojas pendientes o asignadas.
+- **Detalles** muestra las tareas numeradas y el circuito de ida y regreso a EMEC.
+
+Mover una tarea recalcula ambas hojas; eliminar la última deja el total en cero. Si el cálculo falla después de guardar, se puede reintentar con **Actualizar recorrido** y **Guardar km calculados**.
+
+Se usan coordenadas reales. Hasta 11 tareas se busca el mejor orden de la matriz vial; entre 12 y 50 se utiliza una aproximación. La API guarda los kilómetros totales, pero no el orden calculado; los tramos históricos pueden diferir. Las estimaciones excluyen tráfico, carga y restricciones para camiones. OSRM público no garantiza disponibilidad. Si faltan coordenadas, se informa sin inventar puntos ni distancias.
+
+### Viajes del chofer
+
+El rol `Operador_Logistica` abre los viajes disponibles del día o el viaje propio en curso. El historial es una consulta secundaria.
+
+**Aceptar viaje** requiere kilómetros iniciales y foto del odómetro. La cámara solicita permiso, permite revisar y repetir la captura y ofrece abrir ajustes si está bloqueada. No pide micrófono ni galería. Solo se guarda la URI temporal local por usuario y ruta: no hay espacio definido en la base para archivar fotos. El sistema puede limpiar el archivo y la referencia se retira al finalizar. Los viajes anteriores sin foto pueden cerrarse. No se comparan automáticamente los dígitos de la imagen con los kilómetros ingresados.
+
+**Parada espontánea** permite indicar una referencia, usar GPS o marcar coordenadas en el mapa, elegir movimiento y material opcional. Se agrega al viaje activo y recalcula el circuito.
+
+**Finalizar viaje** confirma el regreso a EMEC y el odómetro real. La sugerencia redondea hacia arriba: 69.623 km iniciales más 52,67 km estimados sugieren 69.676 km. Se valida que el final no sea menor al inicio ni exceda 180 km de recorrido. Luego se registra el retorno, se cierra el odómetro y se finaliza la hoja.
+
+El progreso del viaje se conserva localmente, sin tokens ni contraseñas. Las escrituras son operaciones separadas: ante un cierre parcial se reintenta lo pendiente; si el resultado del odómetro es incierto, se bloquea el reenvío y se requiere revisión administrativa. Los viajes iniciados fuera de la app también pueden requerir revisión.
+
+Durante un viaje, Android solicita ubicación en segundo plano y muestra una notificación. Solo conserva el último punto en el teléfono; no lo envía al backend. El servicio se detiene al finalizar o cerrar sesión. El cierre forzado y las restricciones de batería pueden detenerlo.
+
+### Finalización administrativa de viajes
+
+En el tablero, las hojas en curso se resaltan en naranja. `Detalles` permite al administrador confirmar su finalización; la hoja queda en estado Finalizado mediante la API existente, conserva su distancia registrada y no inventa una lectura final del odómetro.
+
+El perfil del chofer consulta avisos cada 5 segundos mientras la app está activa. Un cierre administrativo lo devuelve a la selección de rutas y muestra el aviso una sola vez. Android/iOS solicitan obligatoriamente permiso de notificaciones para el perfil del chofer y generan una notificación local al detectar el cierre. No se utiliza Firebase ni se registran tokens push. Con la app cerrada o suspendida, el aviso se detecta al volver a abrirla; no se garantiza una notificación inmediata en segundo plano.
+
+Requiere reinstalar una APK compilada con `expo-notifications`; la APK anterior no incorpora este módulo nativo. Reiniciar los puentes `api:mobile` y `api:lan` después de actualizar sus scripts. Ambos deben compartir el mismo archivo de avisos: por defecto `D:/descarga codex/plugin-data/sitmas-movil/trip-alerts.json` en Windows; se puede indicar otra ruta con `SITMAS_ALERTS_FILE`. El directorio debe permitir escritura al usuario que ejecuta los puentes. No borrar el archivo para actualizar la aplicación.
+
+### Compatibilidad y odómetros
+
+La integración actual utiliza `GET /api/TP_Material`, `SubtipoMaterial` y los métodos POST, PUT y DELETE de `/api/Vehiculo`. Las tareas pendientes no tienen `FechaPrevista`: la fecha pertenece a la hoja asignada. Inicio muestra todas las tareas sin asignar.
+
+La consulta de odómetros se hace al seleccionar un vehículo. En la verificación del 30/10/2026 respondieron AE 669 QS, AE 752 TM y AE 669 QV; el vehículo sin especificar no tenía registros. **AE 669 QT devuelve HTTP 500 por conversión de `DBNull` en la API original**. La pantalla informa el fallo y permite consultar otro vehículo; no reemplaza lecturas faltantes por cero.
+
+## APK y pruebas físicas
+
+La **APK 1.0.0, versionCode 4**, compilada el 28/10/2026, incluye la compatibilidad con la API actual y el acceso de Juan y Mauro. Mantiene la firma para actualizar la instalación anterior. Su instalación sigue pendiente de confirmación y **no incluye la foto del odómetro ni los cambios posteriores**; requieren una nueva compilación.
+
+[Descargar APK v4](https://expo.dev/artifacts/eas/iw6DnH51t58-ux-bnIVlTIwqDq1ynHW-323VjQyeGko.apk) · [Compilación v4](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/2086417b-47e3-4a78-882c-24e65a9ae04d)
+
+El enlace interno vence el 11/11/2026 y el certificado LAN el 17/11/2026.
+
+El usuario confirmó el piloto **versionCode 3** el 20/10/2026: administrador, chofer, rutas, mapas y paradas espontáneas. Incluye marcadores renumerados al reordenar, redondeo del odómetro y notificación Bio. [Compilación v3](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/cd531108-e189-4318-94ab-958510e9f5a4).
+
+`eas.json` contiene `preview` (APK LAN) y `production` (AAB). Android usa `com.sitmas.movil`; Expo usa propietario `sitmas` y slug `sitmas-movil`. El proyecto tiene firma remota y configuración de mapas en `preview`. La misma firma permite actualizar la APK. No requiere publicar en Google Play; EAS gratuito está sujeto a cuota y cola.
+
+Faltan pruebas de cámara física, iOS, autonomía y seguimiento prolongado con pantalla bloqueada. La adaptación web se revisó en formato Pixel 9 (412 × 924).
+
+### Próxima prueba: servidor en la nube
+
+Cuando se publique oficialmente SITMAS, su base y la URL pública, se preparará una APK con acceso HTTPS protegido. Se comprobarán login, consultas, aceptación de rutas, mapas, paradas espontáneas y cierre, verificando los datos guardados. Hasta entonces continúa el piloto LAN. La prueba en la nube deberá funcionar fuera de la Wi-Fi de esta PC.
+
+## Verificación y estructura
 
 ```bash
 npm run typecheck
@@ -163,63 +172,16 @@ npm test
 npm run export:web
 ```
 
-La suite incluye **49 pruebas automatizadas** sobre consultas y caché, sesión y token JWT, coordenadas, optimización, asignaciones, traslados, eliminación, aceptación de viajes, paradas espontáneas, cierre y recuperación de resultados parciales. También cubre el ruteo sin AbortSignal.throwIfAborted y el inicio, recuperación y cierre del servicio GPS de viajes. Se verificó el flujo inicial del tablero contra la API real con registros temporales que se retiraron al finalizar. Los casos adicionales de traslado y eliminación se validaron con respuestas controladas de API, sin eliminar tareas reales del usuario.
+La última ejecución tuvo **64 pruebas aprobadas** y TypeScript sin errores. La suite cubre sesión y acceso, consultas y caché, rutas, coordenadas, asignaciones, viajes, foto, GPS, cierre, permisos y notificaciones locales, finalización administrativa y recuperación ante fallos parciales. Las pruebas automatizadas usan respuestas controladas; no sustituyen las pruebas físicas. Las pruebas reales anteriores emplearon registros temporales; las verificaciones más recientes de odómetros fueron de lectura.
 
-## Guía breve: TanStack Query y Zustand
+- `src/services/sitmas-api.ts`: cliente y contratos de la API.
+- `src/query/client.ts`: caché y reintentos.
+- `src/query/sitmas.ts`: claves, consultas y mutaciones. Las escrituras invalidan las listas afectadas.
+- `src/state/session-store.ts`: sesión en memoria y limpieza al salir.
+- `src/state/route-board-store.ts`: selección y arrastre del tablero.
+- `src/components/PlanificadorRutas.tsx`: tablero y finalización administrativa.
+- `src/components/NotificationGate.tsx`: permiso obligatorio de notificaciones para choferes.
+- `src/services/trip-notifications.ts`: notificaciones locales y control de avisos ya mostrados.
+- `scripts/trip-alerts.cjs`: persistencia de cierres administrativos compartida por los puentes.
 
-- `src/query/client.ts`: configura la caché compartida y los reintentos.
-- `src/query/sitmas.ts`: define claves, consultas y mutaciones reutilizables. `useSitmasQuery(queries.vehiculos)` entrega datos, carga y error; `useSitmasMutation` guarda y vuelve a consultar las listas afectadas.
-- `src/state/session-store.ts`: Zustand guarda la sesión en memoria y limpia la caché al salir.
-- `src/state/route-board-store.ts`: Zustand comparte la selección del mapa y el arrastre; las tareas reales permanecen en TanStack.
-- `src/components/PlanificadorRutas.tsx`: ejemplo de ambas herramientas trabajando juntas. Los comentarios explican cada responsabilidad sin duplicar datos.
-
-Para agregar una consulta, definir su método en `sitmas-api.ts`, su clave y opciones en `query/sitmas.ts`, y consumirla con `useSitmasQuery`. Para una escritura, indicar en `useSitmasMutation` las claves que deben refrescarse. Usar Zustand para estado compartido de la interfaz, no para copiar respuestas de la API.
-
-## Sesión del chofer y APK
-
-### Sesión del chofer
-
-El rol `Operador-Logistica` abre una vista operativa simple: viajes disponibles del día cuando no hay uno activo, y mapa de la ruta propia cuando está en curso. El historial queda como consulta secundaria. El login usa la cuenta real de SITMAS y envía su token JWT en las solicitudes; la sesión permanece en memoria y no se guarda la contraseña.
-
-**Aceptar viaje** solicita confirmar el odómetro inicial y asigna la hoja al usuario conectado. Durante el recorrido se reutiliza el sistema del administrador: circuito **EMEC → paradas → EMEC**, orden optimizado por distancias viales, kilómetros y tiempo estimados. **Guardar km calculados** actualiza el total en SITMAS.
-
-**Parada espontánea** permite indicar una referencia, marcar un punto en el mapa o ingresar coordenadas GPS, elegir movimiento y opcionalmente material. La parada se agrega al viaje activo y el circuito se recalcula. El total recalculado puede guardarse desde el mapa. Las escrituras evitan dobles envíos y muestran avisos ante resultados inciertos; el backend todavía guarda ubicación/parada e inicio/odómetro mediante operaciones separadas.
-
-La interfaz se adapta al formato web **Pixel 9 (412 × 924)** y se probó en un Android físico. Las áreas seguras evitan superponer el encabezado, los modales y los controles con las barras del sistema. Las estimaciones parten de EMEC y no incluyen tráfico en vivo ni restricciones particulares de camiones.
-
-**Finalizar viaje** pide confirmar el regreso a EMEC y el odómetro real del tablero. La recomendación se redondea hacia arriba a kilómetros enteros: por ejemplo, 69.623 km iniciales más 52,67 km estimados sugieren 69.676 km. Un cierre ya confirmado conserva su valor original al reintentar. Valida que el valor final no sea menor al inicial ni supere 180 km de recorrido, registra el retorno, cierra el odómetro y confirma la hoja en estado Finalizado. Al completar el cierre vuelve a Viajes disponibles y la ruta aparece en Historial.
-
-El registro operativo del viaje (IDs, odómetro inicial y progreso de cierre) se conserva en almacenamiento local web y en documentos de la app Android/iOS, sin guardar contraseñas ni tokens allí. Si el odómetro se cierra y falla la hoja, se puede reintentar solamente el cierre pendiente; si el resultado del odómetro es incierto, se bloquea el reenvío y se requiere revisión administrativa. La API aún no permite recuperar correctamente todos los odómetros abiertos, por lo que los viajes iniciados fuera de esta app requieren revisión.
-
-### APK de prueba y actualización GPS
-
-La APK inicial se instaló en Android y el usuario confirmó el acceso de Juan y Mauro. La actualización con versionCode 2 incorporó permiso de ubicación, bloqueo de uso si se desactiva el GPS, ubicación actual en mapas, franjas seguras para las barras del sistema e ícono BioCba. Corrigió el cálculo del recorrido en React Native, que no dispone de AbortSignal.throwIfAborted. La versión 3, confirmada por el usuario, regenera el marcador nativo cuando cambia su número, redondea la recomendación del odómetro y usa el drawable monocromo «Bio» para la notificación del servicio GPS.
-
-Durante un viaje activo del chofer, se solicita ubicación «todo el tiempo» y se mantiene un servicio con notificación. Solo se conserva el último punto en el teléfono; no se envía al backend. Se detiene al finalizar o cerrar sesión. Android puede detenerlo por cierre forzado o restricciones de batería: no garantiza seguimiento con la app terminada. El piloto funcional no certifica autonomía ni seguimiento prolongado en todos los modelos; esos casos requieren pruebas específicas.
-
-Los perfiles de `eas.json` contemplan `preview` (APK para el piloto LAN) y `production` (AAB). El identificador Android es `com.sitmas.movil`, con propietario Expo `sitmas` y slug `sitmas-movil`. El proyecto EAS está vinculado, con firma Android remota y la variable sensible de mapas en `preview`. La misma firma permite instalar la actualización sobre la APK anterior.
-
-### Piloto por Wi-Fi local, sin modificar SITMAS principal
-
-El perfil `preview` usa `https://192.168.100.2:8443/api`. Desde esta carpeta:
-
-```powershell
-# Con la API de SITMAS encendida en https://localhost:44325
-npm run api:lan
-# En otra terminal: comprobación HTTPS de solo lectura
-npm run api:lan:check
-```
-
-El puente reenvía únicamente rutas `/api/` al backend local y verifica su certificado. Exige token Bearer salvo para el login; la API verifica los tokens. Esto no sustituye los controles de rol y propiedad de las rutas pendientes en el backend. La APK preview confía en una CA privada solo para la IP indicada, conservando HTTPS y la confianza normal para los demás destinos. No se instala un certificado en Windows ni en el teléfono. El certificado del piloto dura 29 días; conservar `.local/lan-api` y su CA pública durante ese plazo. Si cambia la IP o vence el certificado, hace falta preparar y compilar nuevamente el piloto.
-
-La preparación inicial se realiza una sola vez con `./scripts/prepare-lan-api.ps1 -LanIp 192.168.100.2`. Ya se realizó en esta PC. Las claves privadas viven en `.local/`, excluida de Git y de la subida EAS. Solo `assets/certificates/sitmas-lan-ca.pem` es público y debe acompañar la compilación. No borrar ni regenerar estos archivos mientras se use una APK que dependa de ellos.
-
-Para ejecutar la APK, PC y celular deben comunicarse por la red local y la PC debe mantener encendidos SITMAS y el puente. Fuera de esta carpeta: verificar firewall del puerto TCP 8443 e instalar la APK. La sesión web de Expo no autentica automáticamente la CLI. No contratar un plan pago. Las variables sensibles y los archivos privados de `.local/` no se incluyen en Git; se deben preparar al configurar otra PC.
-
-La CLI local se invoca con `node scripts/eas.cjs ...`. Usa EAS 25.2.0 descargado en `.local/npm-cache`; conserva estado y autenticación en `.local/eas`. Sus temporales están en `D:\descarga codex\plugin-temp\sitmas-movil-eas`: EAS no permite que queden dentro del repositorio. No modifica `CODEX_HOME` ni instala Java/globalmente. La organización se comprobó en Free ($0/mes) con 0 compilaciones usadas antes de iniciar el primer build.
-
-La clave Android está en la variable sensible `GOOGLE_MAPS_ANDROID_API_KEY` de `preview`, subida con autorización expresa. Es visible al extraer la APK, como cualquier clave móvil; restringirla al paquete/firma y al SDK Android desde Google Cloud. La captura aportada permite asumir la habilitación del SDK, pero no confirma esas restricciones.
-
-`database/` conserva scripts SQL de compatibilidad y `scripts/audit-origin-coordinates.ps1` es una auditoría manual de lectura que requiere la configuración local del principal. No se ejecutan al instalar, iniciar ni compilar la app. Aplicar SQL corresponde al mantenimiento del backend y requiere una tarea autorizada aparte.
-
-Guías de esta PC: `docs/prueba-chofer.md` y `docs/chofer-android.md`; la carpeta `docs/` contiene documentación local excluida de Git.
+Para agregar datos remotos, definir el método en el cliente y su consulta en `query/sitmas.ts`. Usar Zustand para estado compartido de interfaz; las respuestas de la API permanecen en TanStack Query.

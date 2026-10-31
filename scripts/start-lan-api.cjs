@@ -9,7 +9,7 @@ function createLanServer({ folder, ip }) {
     key: fs.readFileSync(path.join(folder, 'server.key')),
     cert: fs.readFileSync(path.join(folder, 'server.crt')),
     minVersion: 'TLSv1.2',
-  }, createMobileHandler({ upstream: createUpstream(upstreamCa), hosts: [ip] }));
+  }, createMobileHandler({ alerts: require('./trip-alerts.cjs').createTripAlerts(process.env.SITMAS_ALERTS_FILE ?? (process.platform === 'win32' ? 'D:/descarga codex/plugin-data/sitmas-movil/trip-alerts.json' : path.join(__dirname, '../.local/trip-alerts.json'))), upstream: createUpstream(upstreamCa), hosts: [ip] }));
   server.requestTimeout = 30000;
   return server;
 }

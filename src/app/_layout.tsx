@@ -17,6 +17,7 @@ import { queryClient } from '../query/client';
 import { initializeTripStorage } from '../state/trip-storage';
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 import LocationGate from '../components/LocationGate';
+import NotificationGate from '../components/NotificationGate';
 
 initializeTripStorage();
 
@@ -49,7 +50,7 @@ export default function RootLayout() {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     <SafeAreaView style={{ flex: 1, backgroundColor: '#0054a6' }}>
     <QueryClientProvider client={queryClient}>
-      <LocationGate><Stack screenOptions={{ headerShown: false }} /></LocationGate>
+      <NotificationGate><LocationGate><Stack screenOptions={{ headerShown: false }} /></LocationGate></NotificationGate>
       <StatusBar style="light" />
     </QueryClientProvider>
     </SafeAreaView>
