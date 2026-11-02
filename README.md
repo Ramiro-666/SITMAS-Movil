@@ -141,7 +141,6 @@ En el tablero, las hojas en curso se resaltan en naranja. `Detalles` permite al 
 
 El perfil del chofer consulta avisos cada 5 segundos mientras la app está activa. Un cierre administrativo lo devuelve a la selección de rutas y muestra el aviso una sola vez. Android/iOS solicitan obligatoriamente permiso de notificaciones para el perfil del chofer y generan una notificación local al detectar el cierre. No se utiliza Firebase ni se registran tokens push. Con la app cerrada o suspendida, el aviso se detecta al volver a abrirla; no se garantiza una notificación inmediata en segundo plano.
 
-Requiere reinstalar una APK compilada con `expo-notifications`; la APK anterior no incorpora este módulo nativo. Reiniciar los puentes `api:mobile` y `api:lan` después de actualizar sus scripts. Ambos deben compartir el mismo archivo de avisos: por defecto `D:/descarga codex/plugin-data/sitmas-movil/trip-alerts.json` en Windows; se puede indicar otra ruta con `SITMAS_ALERTS_FILE`. El directorio debe permitir escritura al usuario que ejecuta los puentes. No borrar el archivo para actualizar la aplicación.
 
 ### Compatibilidad y odómetros
 
