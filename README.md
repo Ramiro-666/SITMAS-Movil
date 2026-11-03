@@ -151,8 +151,6 @@ La integración actual utiliza `GET /api/TP_Material`, `SubtipoMaterial` y los m
 
 La **APK 1.0.0, versionCode 5**, compilada el 31/10/2026, incorpora la fotografía del odómetro con guía de inclinación lateral, el cierre administrativo de viajes y los avisos locales. Conserva la firma y el acceso HTTPS del piloto LAN. El usuario confirmó su funcionamiento inicial el 31/10/2026. Esta confirmación no sustituye la validación detallada de cámara, acelerómetro, cierre administrativo y notificaciones.
 
-[Descargar APK v5](https://expo.dev/artifacts/eas/CTS84_CQ80GVxnQhvAplwFqQNBh-1yj5Ig1qPP_i1oM.apk) · [Compilación v5](https://expo.dev/accounts/sitmas/projects/sitmas-movil/builds/ecf54d4b-5923-4516-b340-fe51655eeb6c)
-
 La APK anterior, **1.0.0, versionCode 4**, compilada el 28/10/2026, incluye la compatibilidad con la API actual y el acceso de Juan y Mauro. Mantiene la firma para actualizar la instalación anterior. **No incluye la foto del odómetro ni los cambios posteriores**; esas funciones están incorporadas en la APK v5.
 
 
